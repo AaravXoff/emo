@@ -8,6 +8,9 @@ from response_cache import ResponseCache, normalize
 from emo import strip_wake_word
 from html_face import HtmlFace
 from state import RobotStatus
+from speech import WhisperRecognizer
+from unittest.mock import patch
+import json
 
 
 class IntentTests(unittest.TestCase):
@@ -66,6 +69,51 @@ class FaceApiTests(unittest.TestCase):
         payload = response.get_json()
         self.assertFalse(payload["boot_complete"])
         self.assertIn("Whisper", payload["boot_steps"])
+
+
+class WhisperCppTests(unittest.TestCase):
+    def test_cpp_transcription_and_english_translation(self):
+        class NoTranslation:
+            @staticmethod
+            def translate(text, source, target):
+                return None
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            binary = root / "whisper-cli"
+            model = root / "ggml-tiny.bin"
+            wav = root / "input.wav"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            model.touch()
+            wav.touch()
+            recognizer = WhisperRecognizer(
+                model_name="tiny", translation_model_name="tiny",
+                download_root=root / "cache", translator=NoTranslation(),
+                backend="cpp", cpp_binary=binary, cpp_model=model, cpp_threads=2,
+            )
+
+            def fake_run(command, **kwargs):
+                output_prefix = Path(command[command.index("--output-file") + 1])
+                translating = "--translate" in command
+                payload = {
+                    "params": {"language": "hi" if translating else "auto"},
+                    "result": {"language": "hi"},
+                    "transcription": [{"text": "Hello from EMO"}] if translating
+                                    else [{"text": " नमस्ते EMO"}],
+                }
+                output_prefix.with_suffix(".json").write_text(json.dumps(payload), encoding="utf-8")
+                return type("Completed", (), {"stdout": "", "stderr": "", "returncode": 0})()
+
+            with patch("speech.subprocess.run", side_effect=fake_run) as run:
+                result = recognizer.transcribe(wav)
+
+            self.assertEqual(result.text, "नमस्ते EMO")
+            self.assertEqual(result.language, "hi")
+            self.assertEqual(result.english_text, "Hello from EMO")
+            self.assertEqual(result.translation_method, "whisper.cpp-translate")
+            self.assertEqual(run.call_count, 2)
+            self.assertIn("--translate", run.call_args_list[1].args[0])
 
 
 if __name__ == "__main__":
