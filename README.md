@@ -7,7 +7,7 @@ Repository: https://github.com/AaravXoff/emo
 ## Current capabilities
 
 - Local microphone input with energy-based voice activity detection and configurable wake phrase (`Hey EMO` by default).
-- Whisper language detection and transcription; offline Argos Translate packs or Whisper's built-in translation task can translate non-English speech to English.
+- Whisper.cpp or optional Python Whisper for language detection and transcription; Whisper.cpp can translate non-English speech to English and offline Argos Translate packs are also supported.
 - Local, low-latency intent handling for greetings, current time, weather, animal sound requests, and an original EMO tune.
 - LM Studio OpenAI-compatible endpoint for fallback questions (configured for Qwen 2.5 0.5B; use the exact model ID reported by your server).
 - Replies localized with installed offline translation packs or generated in the detected language by the local LLM.
@@ -22,9 +22,9 @@ The NPU is not used by this code yet because the exact NPU board and runtime wer
 
 A Raspberry Pi 3B+ has very limited RAM and CPU for modern neural models. This is why the default Whisper model is `tiny` and model loading is lazy. Test one model at a time before increasing model size. Chatterbox Base and Chromium plus Whisper plus a local LLM may not fit in the same memory budget. In auto mode, EMO avoids loading Chatterbox on a device with less than about 1.8 GB of RAM and uses `espeak-ng` instead.
 
-**Whisper Turbo does not translate speech into English.** The upstream Whisper documentation says Turbo returns the source language even when `task="translate"` is passed. To use Turbo, install Argos language packs for the languages you need. Otherwise, use `tiny` or `base` for Whisper's translation task. A realistic starting setting for a Pi 3B+ is `WHISPER_MODEL=tiny`.
+**Recommended STT for a Pi 3B+: Whisper.cpp.** It builds a native CPU executable, avoids installing the huge Python/PyTorch stack, supports Raspberry Pi, and runs multilingual models. The setup script below downloads the multilingual `tiny` model by default.
 
-Python/PyTorch/Whisper wheel availability changes by operating system and Python version on ARM devices. The installer installs the small core package only; install Whisper separately and check `python -c "import whisper; print('Whisper import OK')"` before relying on live recognition.
+The original Python Whisper backend remains optional for machines with enough RAM and storage, but on your Pi its PyTorch package download may be very large. The native Whisper.cpp backend is what we recommend for the current hardware.
 
 ## 1. Install the core on the Pi
 
@@ -55,16 +55,35 @@ The installer copies `.env.example` to `.env`. Never commit `.env`; it is ignore
 
 ## 2. Install optional AI components
 
-### Whisper speech recognition
+### Whisper speech recognition — recommended: Whisper.cpp
+
+The native build is the recommended option for Raspberry Pi 3B+. It avoids installing a large Python/PyTorch wheel.
 
 ```bash
 cd ~/emo
-source .venv/bin/activate
-pip install -r requirements-stt.txt
-python -c "import whisper; print('Whisper import OK')"
+bash setup_whisper_cpp.sh
 ```
 
-First model use may download weights. Keep `WHISPER_MODEL=tiny` initially. You can set `WHISPER_MODEL=base` if it runs acceptably. Avoid `turbo` on Pi 3B+ unless you have measured memory use and configured offline translation packs.
+The build uses one compile job to keep peak RAM down. It downloads the multilingual tiny model into \`~/whisper.cpp/models/ggml-tiny.bin\`. Model download and initial compilation need an internet connection.
+
+Open your existing local config file:
+
+```bash
+nano ~/emo/.env
+```
+
+Add or update these settings (if they're not present already):
+
+```ini
+WHISPER_BACKEND=cpp
+WHISPER_CPP_BIN=~/whisper.cpp/build/bin/whisper-cli
+WHISPER_CPP_MODEL=~/whisper.cpp/models/ggml-tiny.bin
+WHISPER_CPP_THREADS=2
+```
+
+Save in Nano with Ctrl+O, Enter, then Ctrl+X. The program runs the small multilingual model on the CPU, detects the spoken language, and can run a second pass to translate speech into English.
+
+If you deliberately want the Python Whisper backend on a larger computer, set \`WHISPER_BACKEND=python\` and install \`openai-whisper\` separately. We do not recommend repeating that large PyTorch install on a Pi 3B+ right now.
 
 ### Offline language translation (optional)
 
