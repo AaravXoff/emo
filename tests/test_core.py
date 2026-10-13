@@ -30,6 +30,12 @@ class IntentTests(unittest.TestCase):
         self.assertTrue(detected)
         self.assertEqual(remaining, "what's the weather?")
 
+    def test_wake_word_without_command_and_transcription_variant(self):
+        self.assertEqual(strip_wake_word("Hey EMO", ("hey emo",))[1], "")
+        detected, remaining = strip_wake_word("Hey emu, sing a song", ("hey emo",))
+        self.assertTrue(detected)
+        self.assertEqual(remaining, "sing a song")
+
 
 class CacheTests(unittest.TestCase):
     def test_cache_and_turn_log(self):
