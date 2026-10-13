@@ -167,6 +167,25 @@ Tests exercise direct-intent routing, wake-phrase stripping, cache keys and cont
 - No raw microphone audio is kept. Transcribed text and answers are stored locally in `data/emo_cache.sqlite3`. Set `CACHE_ENABLED=false` to disable the text cache/log, or remove the database when you want to erase its history.
 - Weather requires connectivity. LM Studio must be reachable for fallback Q&A. Direct greeting/time/animal/tune actions can work without LM Studio.
 
+## Local feature hub (100+ commands)
+
+EMO includes a standard-library feature hub that runs before the local LLM fallback. The catalog covers calendar/date helpers, safe arithmetic, unit conversion, text transformations, base64/URL/binary/hex/JSON helpers, random utilities, saved notes, to-do items, countdown timers, Raspberry Pi/system diagnostics, and explicit face expressions. The feature inventory lives in `feature_hub.py`; the current catalog contains over 100 named capabilities.
+
+Try saying or typing:
+
+- `help` or `what can you do`
+- `calculate 12 * (3 + 4)`, `square root of 81`, `average of 3, 7, 9`
+- `convert 5 km to miles`, `100 c to f`
+- `count words in: hello there`, `uppercase: hello emo`, `is this a palindrome: never odd or even`
+- `base64 encode: hello`, `json pretty: {"ok":true,"count":3}`
+- `add note: check the wiring`, `list notes`, `add todo: test the microphone`, `complete todo 1`
+- `set timer for 10 seconds to take a break`, `cancel timer`, `start pomodoro`
+- `show device status`, `memory status`, `cpu temperature`, `dance`
+
+Notes and tasks persist locally in `data/emo_features.sqlite3`. Timers are in-memory and are cancelled when EMO shuts down. System diagnostics use local OS interfaces and do not perform shell execution; the network-status response confirms only whether a local interface is present, not internet reachability. Arithmetic is evaluated with a restricted syntax tree, not Python `eval`. The feature hub adds no third-party runtime dependencies.
+
+The catalog is tested on GitHub Actions, but timers, GPIO, audio, real temperature sensors, and speech output still need testing on the actual Raspberry Pi. This is a large set of local utility commands, not a claim that every command uses an AI model.
+
 ## Project layout
 
 - `emo.py`: startup, wake phrase loop, thermal lockout.

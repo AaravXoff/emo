@@ -5,6 +5,7 @@ import time
 
 from audio_io import SoundEffects
 from intent_router import IntentRouter
+from feature_hub import LocalFeatureHub
 from response_cache import ResponseCache
 from services import TimeService, WeatherService
 from translation import OfflineTranslator, LANGUAGE_NAMES
@@ -28,6 +29,7 @@ class EMOAssistant:
         self.weather = WeatherService()
         self.effects = SoundEffects()
         self._history: list[dict] = []
+        self.features = LocalFeatureHub(config.data_dir, status, face, hardware, notify=self._timer_notify)
 
     def _localized(self, english_text: str, language: str) -> str:
         if language == "en":
@@ -130,26 +132,33 @@ class EMOAssistant:
                     response = self._localized(ORIGINAL_SONG, language)
                     self.face.set_state("dance", duration=3.0)
                 else:
-                    self.face.set_state("thinking")
-                    self.status.set_stage("Thinking", "Sending the question to the local LM Studio model")
-                    try:
-                        response_en = self.llm.complete(english_text, response_language="en", history=self._history)
-                        if language == "en":
-                            response = response_en
-                        else:
-                            response = self.translator.translate(response_en, "en", language)
-                            if not response:
-                                response = self.llm.complete(
-                                    "Translate this assistant response into " + LANGUAGE_NAMES.get(language, language) +
-                                    ". Return only the translation and preserve names, numbers and units:\n\n" + response_en,
-                                    response_language=language,
-                                )
-                    except Exception as exc:
-                        log.warning("LLM fallback failed: %s", exc)
-                        response = self._localized(
-                            "I couldn't reach the local language model. Make sure LM Studio is running, the model is loaded, and LM_STUDIO_BASE_URL is correct.",
-                            language,
-                        )
+                    feature = self.features.handle(english_text)
+                    if feature:
+                        route, feature_response = feature
+                        response = feature_response if language == "en" else self._localized(feature_response, language)
+                        if route.startswith("face_"):
+                            self.face.set_state(route[5:], duration=2.5)
+                    else:
+                        self.face.set_state("thinking")
+                        self.status.set_stage("Thinking", "Sending the question to the local LM Studio model")
+                        try:
+                            response_en = self.llm.complete(english_text, response_language="en", history=self._history)
+                            if language == "en":
+                                response = response_en
+                            else:
+                                response = self.translator.translate(response_en, "en", language)
+                                if not response:
+                                    response = self.llm.complete(
+                                        "Translate this assistant response into " + LANGUAGE_NAMES.get(language, language) +
+                                        ". Return only the translation and preserve names, numbers and units:\n\n" + response_en,
+                                        response_language=language,
+                                    )
+                        except Exception as exc:
+                            log.warning("LLM fallback failed: %s", exc)
+                            response = self._localized(
+                                "I couldn't reach the local language model. Make sure LM Studio is running, the model is loaded, and LM_STUDIO_BASE_URL is correct.",
+                                language,
+                            )
             except Exception as exc:
                 log.exception("Intent processing failed")
                 response = self._localized("Sorry, something went wrong while I was handling that request.", language)
@@ -179,5 +188,12 @@ class EMOAssistant:
         self.status.set_stage("Listening", "Say a wake phrase followed by a request")
         return response
 
+    def _timer_notify(self, message: str) -> None:
+        try:
+            self._speak(message, "en", expression="happy")
+        except Exception:
+            log.exception("Timer notification failed")
+
     def close(self) -> None:
+        self.features.close()
         self.cache.close()

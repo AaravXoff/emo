@@ -9,6 +9,7 @@ from emo import strip_wake_word
 from html_face import HtmlFace
 from state import RobotStatus
 from speech import WhisperRecognizer
+from feature_hub import FEATURES, LocalFeatureHub
 from unittest.mock import patch
 import json
 
@@ -114,6 +115,54 @@ class WhisperCppTests(unittest.TestCase):
             self.assertEqual(result.translation_method, "whisper.cpp-translate")
             self.assertEqual(run.call_count, 2)
             self.assertIn("--translate", run.call_args_list[1].args[0])
+
+
+class LocalFeatureHubTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.hub = LocalFeatureHub(Path(self.temp.name))
+
+    def tearDown(self):
+        self.hub.close()
+        self.temp.cleanup()
+
+    def test_feature_catalog_has_more_than_one_hundred_features(self):
+        self.assertGreaterEqual(len(FEATURES), 100)
+        self.assertEqual(self.hub.feature_count, len(FEATURES))
+
+    def test_safe_calculator_and_conversion(self):
+        self.assertEqual(self.hub.handle("calculate 12 * (3 + 4)")[1], "The answer is 84.")
+        route, text = self.hub.handle("convert 5 km to miles")
+        self.assertEqual(route, "length_conversion")
+        self.assertIn("3.106", text)
+
+    def test_text_toolbox_and_encoders(self):
+        self.assertEqual(self.hub.handle("count words in: hello there friend")[1], "There are 3 word(s).")
+        self.assertEqual(self.hub.handle("uppercase: hello emo")[1], "HELLO EMO")
+        encoded = self.hub.handle("base64 encode: hello")[1]
+        self.assertEqual(encoded, "aGVsbG8=")
+        self.assertEqual(self.hub.handle("base64 decode: aGVsbG8=")[1], "hello")
+
+    def test_notes_and_todos_persist_in_local_database(self):
+        route, saved = self.hub.handle("add note: test note")
+        self.assertEqual(route, "note_add")
+        self.assertIn("Saved note", saved)
+        self.assertIn("test note", self.hub.handle("list notes")[1])
+        route, task = self.hub.handle("add todo: feed cat")
+        self.assertEqual(route, "todo_add")
+        self.assertIn("feed cat", task)
+        task_id = int(task.split("Added task ")[1].split(":")[0])
+        self.assertEqual(self.hub.handle(f"complete todo {task_id}")[0], "todo_complete")
+        self.assertIn("done", self.hub.handle("list todos")[1])
+
+    def test_math_parser_rejects_python_execution(self):
+        self.assertIsNone(self.hub.handle("__import__('os').system('echo unsafe')"))
+        self.assertEqual(self.hub.handle("calculate 8 / 0")[1], "Division by zero is undefined.")
+
+    def test_calendar_and_device_routes(self):
+        self.assertEqual(self.hub.handle("what date is it")[0], "current_date")
+        self.assertEqual(self.hub.handle("python version")[0], "python_version")
+        self.assertEqual(self.hub.handle("next weekday monday")[0], "next_weekday")
 
 
 if __name__ == "__main__":
