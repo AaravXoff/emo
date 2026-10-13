@@ -1,0 +1,4 @@
+# Core runtime only. Optional AI stacks are split into separate requirements files.
+Flask>=3.0,<4.0
+numpy>=1.24
+sounddevice>=0.4.6
