@@ -1,23 +1,23 @@
+"""Small Flask adapter for the HTML/CSS face renderer."""
+from __future__ import annotations
+import logging
 import threading
 import time
-import logging
 from pathlib import Path
 from flask import Flask, jsonify, send_file
 from werkzeug.serving import make_server
 
 
 class HtmlFace:
-    """HTML/CSS face renderer with a small JSON state endpoint."""
-
     def __init__(self, status=None, host="127.0.0.1", port=8765):
         self.status = status
         self.host = host
         self.port = port
         self.html_path = Path(__file__).with_name("face.html")
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.state = "boot"
         self.state_started = time.monotonic()
-        self.state_until = self.state_started + 2.5
+        self.state_until = None
         self.talking = False
         self.app = Flask("emo_face")
 
@@ -28,6 +28,16 @@ class HtmlFace:
         @self.app.get("/api/state")
         def api_state():
             return jsonify(self.snapshot())
+
+        @self.app.get("/api/boot")
+        def api_boot():
+            data = self.snapshot()
+            return jsonify({
+                "boot_complete": data["boot_complete"],
+                "current_stage": data["current_stage"],
+                "current_message": data["current_message"],
+                "boot_steps": data["boot_steps"],
+            })
 
         @self.app.get("/health")
         def health():
@@ -47,14 +57,14 @@ class HtmlFace:
             name="EMO-HTML-Server",
         )
         self.server_thread.start()
-        print(f"HTML face: http://{self.host}:{self.port}/")
+        print(f"EMO HTML face: http://{self.host}:{self.port}/")
 
     def set_state(self, state, duration=None):
         with self.lock:
             self.state = str(state)
             self.state_started = time.monotonic()
             self.state_until = (
-                self.state_started + max(0, duration)
+                self.state_started + max(0, float(duration))
                 if duration is not None
                 else None
             )
@@ -67,7 +77,7 @@ class HtmlFace:
             self.talking = bool(active)
 
     def update(self):
-        # Kept for compatibility with the old face controller.
+        # Compatibility with the previous face interface.
         pass
 
     def snapshot(self):
@@ -79,20 +89,15 @@ class HtmlFace:
             state = self.state
             talking = self.talking
 
-        temperature = 0.0
-        warning = False
-        lockout = False
-        camera_found = False
-        last_gesture = ""
-
+        runtime = {}
         if self.status is not None:
-            with self.status.lock:
-                temperature = float(getattr(self.status, "temperature", 0.0))
-                warning = bool(getattr(self.status, "thermal_warning", False))
-                lockout = bool(getattr(self.status, "thermal_lockout", False))
-                camera_found = bool(getattr(self.status, "camera_found", False))
-                last_gesture = str(getattr(self.status, "last_gesture", ""))
-
+            try:
+                runtime = self.status.snapshot()
+            except Exception:
+                runtime = {}
+        temperature = float(runtime.get("temperature", 0.0) or 0.0)
+        warning = bool(runtime.get("thermal_warning", False))
+        lockout = bool(runtime.get("thermal_lockout", False))
         if warning or lockout:
             state = "overheat"
 
@@ -102,11 +107,18 @@ class HtmlFace:
             "temperature": temperature,
             "thermal_warning": warning,
             "thermal_lockout": lockout,
-            "camera_found": camera_found,
-            "last_gesture": last_gesture,
+            "camera_found": bool(runtime.get("camera_found", False)),
+            "last_gesture": str(runtime.get("last_gesture", "")),
+            "boot_complete": bool(runtime.get("boot_complete", True)),
+            "current_stage": str(runtime.get("current_stage", "")),
+            "current_message": str(runtime.get("current_message", "")),
+            "boot_steps": runtime.get("boot_steps", {}),
+            "last_action": str(runtime.get("last_action", "")),
+            "last_error": str(runtime.get("last_error", "")),
         }
 
     def stop_server(self):
         if self.server is not None:
             self.server.shutdown()
             self.server.server_close()
+            self.server = None
