@@ -1,0 +1,16 @@
+[Unit]
+Description=EMO local AI assistant
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/emo
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/emo/.venv/bin/python %h/emo/emo.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target
