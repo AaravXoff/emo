@@ -133,7 +133,17 @@ class EMOAssistant:
                     self.face.set_state("thinking")
                     self.status.set_stage("Thinking", "Sending the question to the local LM Studio model")
                     try:
-                        response = self.llm.complete(english_text, response_language=language, history=self._history)
+                        response_en = self.llm.complete(english_text, response_language="en", history=self._history)
+                        if language == "en":
+                            response = response_en
+                        else:
+                            response = self.translator.translate(response_en, "en", language)
+                            if not response:
+                                response = self.llm.complete(
+                                    "Translate this assistant response into " + LANGUAGE_NAMES.get(language, language) +
+                                    ". Return only the translation and preserve names, numbers and units:\\n\\n" + response_en,
+                                    response_language=language,
+                                )
                     except Exception as exc:
                         log.warning("LLM fallback failed: %s", exc)
                         response = self._localized(
