@@ -99,7 +99,7 @@ Use `TTS_ENGINE=auto` to try Chatterbox on larger machines and fall back to `esp
 
 ## 3. Weather and time
 
-- Time reads the Pi's system clock and works offline if the system date/time/timezone are correct.
+- Time uses the TimeAPI.io endpoint for the configured IANA zone in `TIMEZONE` (default `Asia/Kolkata`) and falls back to the Pi's system clock when the API is unavailable. Online use of the time API requires internet; the fallback works offline if the Pi clock is correct.
 - Weather uses the Open-Meteo public geocoding/current-weather endpoints and needs an internet connection. No API key is required. Set `WEATHER_CITY` in `.env`, or ask for a named city (e.g., “what's the weather in Delhi?”). Weather responses are cached briefly.
 
 ## 4. Run
