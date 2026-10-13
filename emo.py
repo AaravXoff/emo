@@ -57,6 +57,10 @@ class EMOApplication:
         self.recognizer = WhisperRecognizer(
             self.config.whisper_model, self.config.whisper_translation_model,
             self.config.whisper_download_root, self.translator, status=self.status,
+            backend=self.config.whisper_backend,
+            cpp_binary=self.config.whisper_cpp_bin,
+            cpp_model=self.config.whisper_cpp_model,
+            cpp_threads=self.config.whisper_cpp_threads,
         )
         self.llm = LMStudioClient(
             self.config.lm_studio_base_url, self.config.lm_studio_model,
