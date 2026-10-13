@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+*.wav
+*.mp3
+*.onnx
+*.pt
+*.pth
+*.safetensors
+models/
+.cache/
+emo_error.log
+emo_pygame_backup.py
