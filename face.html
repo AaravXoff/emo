@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>EMO Face</title>
+<style>
+:root{--eye:#00dcff;--lx:0px;--ly:0px}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+body{display:grid;place-items:center}
+#face{position:relative;width:min(100vw,133.333vh);aspect-ratio:4/3;background:#000;overflow:hidden;--eye:#00dcff}
+.eye{position:absolute;top:30%;width:28%;height:38%;background:var(--eye);border-radius:27%;box-shadow:0 0 12px var(--eye),0 0 30px color-mix(in srgb,var(--eye),transparent 48%);transform:translate(var(--lx),var(--ly));transition:height .15s,top .15s,background .2s,border-radius .2s}
+.left{left:12%}.right{right:12%}
+.spinner{display:none;position:absolute;left:50%;top:6%;width:8%;min-width:17px;max-width:25px;aspect-ratio:1;border:2px solid #18313a;border-top-color:#bd66ff;border-right-color:#00dcff;border-radius:50%;animation:spin .65s linear infinite}
+#face[data-state=thinking] .spinner{display:block}
+.mouth{display:none;position:absolute;left:50%;top:83%;width:12%;height:3%;min-height:5px;transform:translateX(-50%);border:2px solid var(--eye);border-radius:50%;box-shadow:0 0 8px var(--eye)}
+#face[data-talking=true] .mouth,#face[data-state=talking] .mouth{display:block;animation:mouth .17s infinite alternate ease-in-out}
+#face[data-state=happy] .mouth,#face[data-state=excited] .mouth{display:block;top:81%;width:17%;height:8%;border:0;border-bottom:3px solid var(--eye);border-radius:0 0 50% 50%;background:transparent}
+#face[data-state=sad] .mouth{display:block;width:17%;height:8%;border:0;border-top:3px solid var(--eye);border-radius:50% 50% 0 0}
+#face[data-state=listening]{--eye:#ffd200}
+#face[data-state=listening] .eye{height:33%;animation:listen .8s ease-in-out infinite alternate}
+#face[data-state=thinking]{--eye:#bd66ff}
+#face[data-state=thinking] .eye{height:28%;top:34%}
+#face[data-state=happy],#face[data-state=excited],#face[data-state=dance]{--eye:#28ff6e}
+#face[data-state=happy] .eye{height:25%;top:39%}
+#face[data-state=excited] .eye{animation:bounce .35s infinite alternate}
+#face[data-state=sad] .eye{height:28%;top:37%}
+#face[data-state=angry]{--eye:#ff302f}
+#face[data-state=angry] .left{transform:translate(var(--lx),var(--ly)) skewY(-13deg)}
+#face[data-state=angry] .right{transform:translate(var(--lx),var(--ly)) skewY(13deg)}
+#face[data-state=surprised] .eye,#face[data-state=scared] .eye{height:44%;top:25%;border-radius:45%}
+#face[data-state=sleepy] .eye,#face[data-state=bored] .eye{height:16%;top:42%}
+#face[data-state=confused] .left{height:31%;top:32%}
+#face[data-state=confused] .right{height:22%;top:40%}
+#face[data-state=curious]{--eye:#ffd200}
+#face[data-state=curious] .left{height:29%;top:35%}
+#face[data-state=curious] .right{height:36%;top:29%}
+#face[data-state=love]{--eye:#ff64b4}
+#face[data-state=love] .eye{height:24%;top:40%;border-radius:48%}
+.heart{display:none;position:absolute;left:50%;top:7%;transform:translateX(-50%);color:#ff64b4;font-size:clamp(12px,5vw,24px);animation:pulse .65s infinite alternate}
+#face[data-state=love] .heart{display:block}
+#face[data-state=mischief]{--eye:#28ff6e}
+#face[data-state=mischief] .eye{height:27%;top:35%}
+#face[data-state=focus] .eye{height:18%;top:43%;border-radius:18%}
+#face[data-state=dizzy] .eye{animation:dizzy .7s infinite alternate}
+#face[data-state=wink] .right{height:2%;top:48%}
+#face[data-state=blink] .eye,#face.auto-blink .eye{height:2%!important;top:48%!important}
+.flames{display:none;position:absolute;bottom:-1%;left:-3%;width:106%;height:27%;pointer-events:none;background:repeating-linear-gradient(105deg,transparent 0 12px,#ff3828 13px 22px,#ff9d00 23px 31px,#ffde34 32px 37px,transparent 38px 48px);clip-path:polygon(0 100%,0 58%,5% 75%,10% 14%,16% 65%,22% 5%,28% 66%,35% 20%,41% 72%,48% 0,55% 66%,62% 12%,69% 73%,76% 20%,83% 67%,90% 8%,96% 62%,100% 48%,100% 100%);animation:fire .22s infinite alternate;filter:drop-shadow(0 -4px 12px #ff5700)}
+#face[data-overheat=true] .flames,#face[data-state=overheat] .flames{display:block}
+#face[data-overheat=true],#face[data-state=overheat]{--eye:#ff392e}
+#face[data-state=overheat] .eye{height:28%;top:36%;animation:shake .18s infinite alternate}
+#face[data-state=overheat] .mouth{display:none!important}
+#face[data-state=noise]{--eye:#ff922e}
+#face[data-state=noise] .eye{height:26%;top:40%}
+#face[data-state=error]{--eye:#ff3030}
+#face[data-state=error] .eye{animation:error .45s infinite alternate}
+.hud{position:absolute;bottom:3%;color:#41545b;font:clamp(6px,2vw,9px) sans-serif;letter-spacing:1px}
+#temperature{left:3%}#camera-dot{right:3%;width:6px;height:6px;border-radius:50%;background:#293238}
+#camera-dot.found{background:#28ff6e;box-shadow:0 0 5px #28ff6e}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes mouth{from{transform:translateX(-50%) scaleY(.35)}to{transform:translateX(-50%) scaleY(1.2)}}@keyframes listen{to{translate:0 3px}}@keyframes bounce{to{translate:0 -7px}}@keyframes dizzy{to{border-radius:15%}}@keyframes pulse{to{scale:1.15}}@keyframes fire{to{transform:scaleY(1.08) skewX(2deg)}}@keyframes shake{to{translate:1px -2px}}@keyframes error{to{opacity:.5}}
+</style>
+</head>
+<body>
+<div id="face" data-state="boot" data-talking="false" data-overheat="false">
+  <div class="spinner"></div><div class="heart">♥</div>
+  <div class="eye left"></div><div class="eye right"></div>
+  <div class="mouth"></div><div class="flames"></div>
+  <div id="temperature" class="hud">--°C</div><div id="camera-dot" class="hud" title="Camera status"></div>
+</div>
+<script>
+const face=document.getElementById('face'),tempLabel=document.getElementById('temperature'),cameraDot=document.getElementById('camera-dot');
+async function updateFace(){try{const r=await fetch('/api/state',{cache:'no-store'});if(!r.ok)throw Error('state unavailable');const d=await r.json();face.dataset.state=d.state||'idle';face.dataset.talking=String(!!d.talking);face.dataset.overheat=String(!!d.thermal_warning);tempLabel.textContent=d.temperature>0?d.temperature.toFixed(1)+'°C':'--°C';cameraDot.classList.toggle('found',!!d.camera_found);cameraDot.title=d.camera_found?'Camera connected'+(d.last_gesture?': '+d.last_gesture:''):'No camera detected'}catch(e){/* backend temporarily unavailable */}}
+setInterval(updateFace,250);updateFace();
+let nextBlink=performance.now()+2500;
+function idleBlink(now){if(face.dataset.state==='idle'&&now>=nextBlink){face.classList.add('auto-blink');setTimeout(()=>face.classList.remove('auto-blink'),130);nextBlink=now+2000+Math.random()*3000}requestAnimationFrame(idleBlink)}
+requestAnimationFrame(idleBlink);
+setInterval(()=>{if(face.dataset.state!=='idle'){face.style.setProperty('--lx','0px');face.style.setProperty('--ly','0px');return}face.style.setProperty('--lx',(Math.random()*8-4)+'px');face.style.setProperty('--ly',(Math.random()*5-2.5)+'px')},3500);
+</script>
+</body>
+</html>
