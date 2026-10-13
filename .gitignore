@@ -15,3 +15,8 @@ models/
 .cache/
 emo_error.log
 emo_pygame_backup.py
+
+# Runtime state and local recordings/cache (never upload these)
+data/*.sqlite3*
+data/*.wav
+data/.incoming*
