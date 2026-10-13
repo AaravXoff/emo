@@ -16,10 +16,31 @@ WEATHER_CODES = {
 
 
 class TimeService:
+    """Fetches the current time from TimeAPI.io, falling back to the Pi's clock."""
     @staticmethod
-    def current_time() -> str:
-        now = datetime.now().astimezone()
-        return f"It is {now.strftime('%I:%M %p').lstrip('0')} on {now.strftime('%A, %B')} {now.day}."
+    def current_time(time_zone: str = "Asia/Kolkata", timeout: float = 2.0) -> str:
+        import logging
+        log = logging.getLogger(__name__)
+        try:
+            query = urllib.parse.urlencode({"timeZone": time_zone})
+            request = urllib.request.Request(
+                "https://timeapi.io/api/Time/current/zone?" + query,
+                headers={"Accept": "application/json", "User-Agent": "EMO-Robot/1.0"},
+            )
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            year, month, day = int(data["year"]), int(data["month"]), int(data["day"])
+            hour, minute, second = int(data["hour"]), int(data["minute"]), int(data.get("seconds", 0))
+            now = datetime(year, month, day, hour, minute, second)
+            clock = now.strftime("%I:%M %p").lstrip("0")
+            day_name = str(data.get("dayOfWeek") or now.strftime("%A"))
+            month_name = now.strftime("%B")
+            zone = str(data.get("timeZone") or time_zone)
+            return f"It is {clock} on {day_name}, {month_name} {day}, in {zone}."
+        except Exception as exc:
+            log.debug("Time API unavailable; using local Pi clock: %s", exc)
+            now = datetime.now().astimezone()
+            return f"It is {now.strftime('%I:%M %p').lstrip('0')} on {now.strftime('%A, %B')} {now.day}."
 
 
 class WeatherService:
