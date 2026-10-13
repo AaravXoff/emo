@@ -89,7 +89,7 @@ class EMOAssistant:
         }
 
         # Do not serve a stale clock answer. Weather is cached only for the short configured TTL.
-        if cached and cached["route"] not in {"time", "weather", "animal_sound", "sing"}:
+        if cached and cached["route"] not in {"time", "animal_sound", "sing"}:
             response = cached["response_text"]
             route = cached["route"]
             cache_hit = True
