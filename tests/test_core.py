@@ -6,6 +6,8 @@ from pathlib import Path
 from intent_router import IntentRouter
 from response_cache import ResponseCache, normalize
 from emo import strip_wake_word
+from html_face import HtmlFace
+from state import RobotStatus
 
 
 class IntentTests(unittest.TestCase):
@@ -53,6 +55,17 @@ class CacheTests(unittest.TestCase):
             row = cache.connection.execute("SELECT original_text, route FROM turns").fetchone()
             self.assertEqual((row["original_text"], row["route"]), ("Hello", "greeting"))
             cache.close()
+
+
+class FaceApiTests(unittest.TestCase):
+    def test_state_endpoint_exposes_boot_status(self):
+        status = RobotStatus()
+        face = HtmlFace(status=status)
+        response = face.app.test_client().get("/api/state")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertFalse(payload["boot_complete"])
+        self.assertIn("Whisper", payload["boot_steps"])
 
 
 if __name__ == "__main__":
