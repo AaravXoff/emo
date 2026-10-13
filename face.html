@@ -92,7 +92,8 @@ const face=document.getElementById('face'),tempLabel=document.getElementById('te
 const bootStage=document.getElementById('boot-stage'),bootMessage=document.getElementById('boot-message'),bootSteps=document.getElementById('boot-steps');
 let bootRenderKey='';
 function renderBoot(d){
-  face.dataset.bootComplete=String(!!d.boot_complete);
+  const loadingModel=String(d.current_stage||'').startsWith('Loading ');
+  face.dataset.bootComplete=String(!!d.boot_complete&&!loadingModel);
   if(bootStage)bootStage.textContent=d.current_stage||'Starting EMO';
   if(bootMessage)bootMessage.textContent=d.current_message||'Initializing services';
   const entries=Object.entries(d.boot_steps||{});
