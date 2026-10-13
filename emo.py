@@ -30,12 +30,14 @@ def strip_wake_word(text: str, phrases: tuple[str, ...]) -> tuple[bool, str]:
     for phrase in sorted(phrases, key=len, reverse=True):
         match = re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", folded)
         if match:
-            remaining = (clean[:match.start()] + " " + clean[match.end():]).strip(" ,.!?:;")
-            return True, re.sub(r"\s+", " ", remaining).strip()
+            remaining = (clean[:match.start()] + " " + clean[match.end():]).strip()
+            remaining = re.sub(r"^[\\s,;:]+", "", remaining)
+            return True, re.sub(r"\\s+", " ", remaining).strip()
     # A few common Whisper transcription variants for "Hey EMO".
     if re.search(r"\b(hey|hi|hello)\s+(emu|emo)\b", folded):
-        remaining = re.sub(r"\b(hey|hi|hello)\s+(emu|emo)\b", "", clean, flags=re.I).strip(" ,.!?:;")
-        return True, re.sub(r"\s+", " ", remaining).strip()
+        remaining = re.sub(r"\\b(hey|hi|hello)\\s+(emu|emo)\\b", "", clean, flags=re.I).strip()
+        remaining = re.sub(r"^[\\s,;:]+", "", remaining)
+        return True, re.sub(r"\\s+", " ", remaining).strip()
     return False, clean
 
 
@@ -125,7 +127,6 @@ class EMOApplication:
         )
         with self.status.lock:
             self.status.boot_complete = True
-        self.status.set_state if hasattr(self.status, "set_state") else None
         self.face.set_state("idle")
         self.status.set_stage("Listening", "Say a wake phrase followed by a request")
         log.info("EMO boot complete. HTML face is at http://127.0.0.1:8765/")
@@ -143,16 +144,27 @@ class EMOApplication:
             touched_recently = time.monotonic() - self.status.snapshot()["last_touch"] < 20
             if self.config.wake_word_required and time.monotonic() > self._awake_until and not touched_recently:
                 heard, remainder = strip_wake_word(result.text, self.config.wake_words)
+                english_remainder = result.english_text
+                if not heard and result.english_text and result.english_text != result.text:
+                    heard, english_remainder = strip_wake_word(result.english_text, self.config.wake_words)
+                    if heard:
+                        remainder = english_remainder
                 if not heard:
                     log.debug("Ignored speech without wake phrase")
                     return
                 self._awake_until = time.monotonic() + self.config.wake_timeout_seconds
+                if result.english_text and result.english_text != result.text:
+                    detected_english_wake, english_remainder = strip_wake_word(result.english_text, self.config.wake_words)
+                    if not detected_english_wake:
+                        english_remainder = result.english_text
+                else:
+                    english_remainder = remainder
                 if not remainder:
                     self.status.set_stage("Awake", "EMO is awake; say your request")
                     self.face.set_state("listening", duration=1.2)
                     self.speech.speak("I'm listening.", result.language)
                     return
-                result = type(result)(remainder, result.language, remainder if result.english_text == result.text else result.english_text, result.translation_method)
+                result = type(result)(remainder, result.language, english_remainder or remainder, result.translation_method)
 
             if time.monotonic() > self._awake_until:
                 self._awake_until = time.monotonic() + self.config.wake_timeout_seconds
