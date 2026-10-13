@@ -19,6 +19,11 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(self.router.match("Can you sing a song?").name, "sing")
         self.assertEqual(self.router.match("Hello EMO").name, "greeting")
 
+    def test_weather_city_extraction(self):
+        intent = self.router.match("What's the weather in Delhi today?")
+        self.assertEqual(intent.name, "weather")
+        self.assertEqual(intent.entity, "delhi")
+
     def test_unknown_goes_to_llm(self):
         self.assertEqual(self.router.match("Explain black holes").name, "llm")
 
