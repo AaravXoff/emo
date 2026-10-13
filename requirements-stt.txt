@@ -1,0 +1,2 @@
+# Optional local speech recognition; ARM/Python wheel availability varies.
+openai-whisper
