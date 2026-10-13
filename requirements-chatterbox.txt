@@ -1,0 +1,2 @@
+# Optional, memory-intensive speech generation. May not be suitable for a Pi 3B+.
+chatterbox-tts
