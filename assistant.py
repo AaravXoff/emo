@@ -98,7 +98,12 @@ class EMOAssistant:
             process_data["cache"] = "miss"
             try:
                 if self.status.snapshot()["thermal_lockout"]:
-                    response = self._localized("I'm getting too hot, so I'm pausing heavy AI work until I cool down.", language)
+                    thermal_replies = {
+                        "en": "I'm getting too hot, so I'm pausing heavy AI work until I cool down.",
+                        "hi": "मैं गर्म हो रहा हूँ, इसलिए ठंडा होने तक भारी AI काम रोक रहा हूँ।",
+                        "pa": "ਮੈਂ ਬਹੁਤ ਗਰਮ ਹੋ ਰਿਹਾ ਹਾਂ, ਇਸ ਲਈ ਠੰਢਾ ਹੋਣ ਤੱਕ ਭਾਰੀ AI ਕੰਮ ਰੋਕ ਰਿਹਾ ਹਾਂ।",
+                    }
+                    response = thermal_replies.get(language, thermal_replies["en"])
                     route = "thermal_guard"
                 elif intent.name == "greeting":
                     response = self._greeting(language, original_text)
@@ -125,6 +130,7 @@ class EMOAssistant:
                     response = self._localized(ORIGINAL_SONG, language)
                     self.face.set_state("dance", duration=3.0)
                 else:
+                    self.face.set_state("thinking")
                     self.status.set_stage("Thinking", "Sending the question to the local LM Studio model")
                     try:
                         response = self.llm.complete(english_text, response_language=language, history=self._history)
@@ -158,7 +164,8 @@ class EMOAssistant:
             original_text, language, english_text, route, response, cache_hit=cache_hit,
             process={**process_data, "elapsed_seconds": round(time.monotonic() - started, 3)},
         )
-        self._speak(response, language, expression="happy" if route == "greeting" else "talking")
+        expression = {"greeting": "happy", "sing": "dance", "animal_sound": "excited"}.get(route, "talking")
+        self._speak(response, language, expression=expression)
         self.status.set_stage("Listening", "Say a wake phrase followed by a request")
         return response
 
