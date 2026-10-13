@@ -1,2 +1,6 @@
-# Optional local speech recognition; ARM/Python wheel availability varies.
-openai-whisper
+# Raspberry Pi 3B+ recommendation: use native Whisper.cpp, not PyTorch.
+# Run: bash setup_whisper_cpp.sh
+#
+# Optional alternative only: uncomment openai-whisper if you deliberately want the
+# Python/PyTorch backend and have enough storage, memory and network bandwidth.
+# openai-whisper
