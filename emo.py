@@ -31,15 +31,16 @@ def strip_wake_word(text: str, phrases: tuple[str, ...]) -> tuple[bool, str]:
         match = re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", folded)
         if match:
             remaining = (clean[:match.start()] + " " + clean[match.end():]).strip()
-            remaining = re.sub(r"^[\\s,;:]+", "", remaining)
-            return True, re.sub(r"\\s+", " ", remaining).strip()
-    # A few common Whisper transcription variants for "Hey EMO".
-    if re.search(r"\b(hey|hi|hello)\s+(emu|emo)\b", folded):
-        remaining = re.sub(r"\\b(hey|hi|hello)\\s+(emu|emo)\\b", "", clean, flags=re.I).strip()
-        remaining = re.sub(r"^[\\s,;:]+", "", remaining)
-        return True, re.sub(r"\\s+", " ", remaining).strip()
+            return True, remaining.lstrip(" ,;:").strip()
+    # Handle common speech-recognition variants such as "Hey emu".
+    words = clean.split()
+    if (
+        len(words) >= 2
+        and words[0].casefold() in {"hey", "hi", "hello"}
+        and words[1].strip(",.!?:;").casefold() in {"emu", "emo"}
+    ):
+        return True, " ".join(words[2:]).lstrip(" ,;:").strip()
     return False, clean
-
 
 class EMOApplication:
     def __init__(self) -> None:
