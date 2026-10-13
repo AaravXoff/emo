@@ -5,7 +5,7 @@ cd "$ROOT_DIR"
 
 echo "[1/5] Installing system packages..."
 sudo apt-get update
-sudo apt-get install -y python3-full python3-venv python3-dev build-essential \
+sudo apt-get install -y python3-full python3-venv python3-dev build-essential cmake \
   libopenblas-dev libsndfile1 portaudio19-dev alsa-utils espeak-ng curl git
 
 echo "[2/5] Creating virtual environment..."
@@ -23,5 +23,5 @@ chmod 600 .env
 
 echo "[5/5] Core install complete."
 echo "Start with: source .venv/bin/activate && python emo.py"
-echo "Optional Whisper install: pip install -r requirements-stt.txt"
+echo "Recommended Pi speech setup: bash setup_whisper_cpp.sh"
 echo "Optional offline translations: pip install -r requirements-translation.txt"
