@@ -59,10 +59,29 @@ body{display:grid;place-items:center}
 #temperature{left:3%}#camera-dot{right:3%;width:6px;height:6px;border-radius:50%;background:#293238}
 #camera-dot.found{background:#28ff6e;box-shadow:0 0 5px #28ff6e}
 @keyframes spin{to{transform:rotate(360deg)}}@keyframes mouth{from{transform:translateX(-50%) scaleY(.35)}to{transform:translateX(-50%) scaleY(1.2)}}@keyframes listen{to{translate:0 3px}}@keyframes bounce{to{translate:0 -7px}}@keyframes dizzy{to{border-radius:15%}}@keyframes pulse{to{scale:1.15}}@keyframes fire{to{transform:scaleY(1.08) skewX(2deg)}}@keyframes shake{to{translate:1px -2px}}@keyframes error{to{opacity:.5}}
+
+.boot-screen{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;justify-content:center;gap:3%;padding:6% 8%;background:radial-gradient(ellipse at 50% 8%,#0b2732 0%,#02070b 55%,#000 100%);color:#d7f5ff;font-family:system-ui,sans-serif}
+#face[data-boot-complete=true] .boot-screen{display:none}
+.boot-brand{font-size:clamp(18px,9vw,40px);font-weight:800;letter-spacing:.22em;color:#00dcff;text-align:center;text-shadow:0 0 16px #00dcff66}
+.boot-caption{color:#7aabb8;text-align:center;font-size:clamp(7px,2.2vw,11px);letter-spacing:.15em;text-transform:uppercase}
+.boot-loader{width:22px;height:22px;border:2px solid #18313a;border-top-color:#00dcff;border-right-color:#bd66ff;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+.boot-stage{font-size:clamp(9px,3vw,13px);font-weight:650;text-align:center;color:#e6fbff}
+.boot-message{font-size:clamp(7px,2.1vw,10px);text-align:center;color:#68818a;min-height:1em}
+.boot-steps{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;margin-top:1%}
+.boot-step{min-width:0;display:grid;grid-template-columns:6px minmax(0,1fr);gap:5px;align-items:start;font-size:clamp(7px,1.9vw,9px);color:#8ca5ad}
+.boot-step-dot{width:5px;height:5px;border-radius:50%;margin-top:3px;background:#33434a}
+.boot-step[data-status=ok] .boot-step-dot{background:#28ff6e;box-shadow:0 0 5px #28ff6e66}
+.boot-step[data-status=running] .boot-step-dot{background:#00dcff;box-shadow:0 0 5px #00dcff;animation:pulse .8s infinite alternate}
+.boot-step[data-status=warning] .boot-step-dot{background:#ffb02e}
+.boot-step[data-status=error] .boot-step-dot{background:#ff392e}
+.boot-step-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.boot-step-detail{grid-column:2;color:#516a72;font-size:.9em;line-height:1.2;overflow-wrap:anywhere}
+
 </style>
 </head>
 <body>
-<div id="face" data-state="boot" data-talking="false" data-overheat="false">
+<div id="face" data-state="boot" data-talking="false" data-overheat="false" data-boot-complete="false">
+  <div class="boot-screen" id="boot-screen"><div class="boot-brand">EMO</div><div class="boot-caption">Local AI assistant</div><div class="boot-loader"></div><div class="boot-stage" id="boot-stage">Starting services…</div><div class="boot-message" id="boot-message">Preparing the robot</div><div class="boot-steps" id="boot-steps"></div></div>
   <div class="spinner"></div><div class="heart">♥</div>
   <div class="eye left"></div><div class="eye right"></div>
   <div class="mouth"></div><div class="flames"></div>
@@ -70,7 +89,25 @@ body{display:grid;place-items:center}
 </div>
 <script>
 const face=document.getElementById('face'),tempLabel=document.getElementById('temperature'),cameraDot=document.getElementById('camera-dot');
-async function updateFace(){try{const r=await fetch('/api/state',{cache:'no-store'});if(!r.ok)throw Error('state unavailable');const d=await r.json();face.dataset.state=d.state||'idle';face.dataset.talking=String(!!d.talking);face.dataset.overheat=String(!!d.thermal_warning);tempLabel.textContent=d.temperature>0?d.temperature.toFixed(1)+'°C':'--°C';cameraDot.classList.toggle('found',!!d.camera_found);cameraDot.title=d.camera_found?'Camera connected'+(d.last_gesture?': '+d.last_gesture:''):'No camera detected'}catch(e){/* backend temporarily unavailable */}}
+const bootStage=document.getElementById('boot-stage'),bootMessage=document.getElementById('boot-message'),bootSteps=document.getElementById('boot-steps');
+let bootRenderKey='';
+function renderBoot(d){
+  face.dataset.bootComplete=String(!!d.boot_complete);
+  if(bootStage)bootStage.textContent=d.current_stage||'Starting EMO';
+  if(bootMessage)bootMessage.textContent=d.current_message||'Initializing services';
+  const entries=Object.entries(d.boot_steps||{});
+  const key=JSON.stringify([d.boot_complete,d.current_stage,d.current_message,entries]);
+  if(key===bootRenderKey||!bootSteps)return;
+  bootRenderKey=key;bootSteps.replaceChildren();
+  for(const [name,item] of entries){
+    const row=document.createElement('div');row.className='boot-step';row.dataset.status=item.status||'pending';
+    const dot=document.createElement('div');dot.className='boot-step-dot';
+    const label=document.createElement('div');label.className='boot-step-name';label.textContent=name;
+    const detail=document.createElement('div');detail.className='boot-step-detail';detail.textContent=item.detail||'';
+    row.append(dot,label,detail);bootSteps.appendChild(row);
+  }
+}
+async function updateFace(){try{const r=await fetch('/api/state',{cache:'no-store'});if(!r.ok)throw Error('state unavailable');const d=await r.json();renderBoot(d);face.dataset.state=d.state||'idle';face.dataset.talking=String(!!d.talking);face.dataset.overheat=String(!!d.thermal_warning);tempLabel.textContent=d.temperature>0?d.temperature.toFixed(1)+'°C':'--°C';cameraDot.classList.toggle('found',!!d.camera_found);cameraDot.title=d.camera_found?'Camera connected'+(d.last_gesture?': '+d.last_gesture:''):'No camera detected'}catch(e){/* backend temporarily unavailable */}}
 setInterval(updateFace,250);updateFace();
 let nextBlink=performance.now()+2500;
 function idleBlink(now){if(face.dataset.state==='idle'&&now>=nextBlink){face.classList.add('auto-blink');setTimeout(()=>face.classList.remove('auto-blink'),130);nextBlink=now+2000+Math.random()*3000}requestAnimationFrame(idleBlink)}
