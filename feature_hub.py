@@ -346,7 +346,9 @@ class LocalFeatureHub:
 
         # Text processing, only on explicit commands.
         m=re.match(r"^(?:count words in|word count)\s*[:,-]?\s*(.+)$",original,re.I)
-        if m:return "word_count",f"There are {len(re.findall(r'\b[\w\'-]+\b',m.group(1)))} word(s)."
+        if m:
+            words=re.findall(r"\b[\w'-]+\b",m.group(1))
+            return "word_count",f"There are {len(words)} word(s)."
         m=re.match(r"^(?:count characters in|character count|count chars)\s*[:,-]?\s*(.+)$",original,re.I)
         if m:return "character_count",f"There are {len(m.group(1))} character(s), including spaces."
         m=re.match(r"^(?:count lines in|line count)\s*[:,-]?\s*(.+)$",original,re.I|re.S)
