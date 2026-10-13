@@ -58,6 +58,7 @@ class Config:
     lm_studio_model: str
     lm_studio_timeout_seconds: int
     weather_city: str
+    time_zone: str
     cache_enabled: bool
     cache_ttl_seconds: int
     weather_cache_ttl_seconds: int
@@ -97,6 +98,7 @@ class Config:
             lm_studio_model=os.getenv("LM_STUDIO_MODEL", "qwen2.5-0.5b-instruct"),
             lm_studio_timeout_seconds=_int("LM_STUDIO_TIMEOUT_SECONDS", 35),
             weather_city=os.getenv("WEATHER_CITY", "").strip(),
+            time_zone=os.getenv("TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata",
             cache_enabled=_bool("CACHE_ENABLED", True),
             cache_ttl_seconds=_int("CACHE_TTL_SECONDS", 86400),
             weather_cache_ttl_seconds=_int("WEATHER_CACHE_TTL_SECONDS", 300),
