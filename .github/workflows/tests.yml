@@ -14,5 +14,7 @@ jobs:
           python-version: "3.11"
       - name: Install test dependency
         run: python -m pip install Flask
+      - name: Compile Python modules
+        run: python -m compileall -q .
       - name: Run tests
         run: python -m unittest discover -s tests -v
