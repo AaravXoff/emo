@@ -38,6 +38,17 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+def _audio_device():
+    """Parse AUDIO_INPUT_DEVICE: blank/default for auto; integer index or device-name string."""
+    value = os.getenv("AUDIO_INPUT_DEVICE", "").strip()
+    if not value or value.casefold() in {"default", "auto", "none"}:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
 @dataclass(frozen=True)
 class Config:
     base_dir: Path
@@ -52,6 +63,7 @@ class Config:
     whisper_cpp_threads: int
     preload_whisper: bool
     sample_rate: int
+    audio_input_device: str | int | None
     audio_rms_threshold: float
     max_utterance_seconds: float
     trailing_silence_seconds: float
@@ -96,6 +108,7 @@ class Config:
             whisper_cpp_threads=max(1, _int("WHISPER_CPP_THREADS", 2)),
             preload_whisper=_bool("PRELOAD_WHISPER", False),
             sample_rate=_int("AUDIO_SAMPLE_RATE", 16000),
+            audio_input_device=_audio_device(),
             audio_rms_threshold=_float("AUDIO_RMS_THRESHOLD", 0.012),
             max_utterance_seconds=_float("MAX_UTTERANCE_SECONDS", 8.0),
             trailing_silence_seconds=_float("TRAILING_SILENCE_SECONDS", 0.75),

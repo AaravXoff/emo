@@ -10,6 +10,7 @@ from html_face import HtmlFace
 from state import RobotStatus
 from speech import WhisperRecognizer
 from feature_hub import FEATURES, LocalFeatureHub
+from audio_io import AudioRecorder
 from unittest.mock import patch
 import json
 
@@ -115,6 +116,35 @@ class WhisperCppTests(unittest.TestCase):
             self.assertEqual(result.translation_method, "whisper.cpp-translate")
             self.assertEqual(run.call_count, 2)
             self.assertIn("--translate", run.call_args_list[1].args[0])
+
+
+class AudioDeviceSelectionTests(unittest.TestCase):
+    def test_falls_back_to_first_input_when_os_default_is_minus_one(self):
+        class FakeSD:
+            default = type("Default", (), {"device": (-1, -1)})()
+            @staticmethod
+            def query_devices(device=None):
+                devices = [
+                    {"name": "USB Microphone", "max_input_channels": 1},
+                    {"name": "HDMI Output", "max_input_channels": 0},
+                ]
+                return devices if device is None else devices[device]
+        recorder = AudioRecorder(16000, 0.012, 8, 0.75)
+        device, name, error = recorder._resolve_input_device(FakeSD)
+        self.assertEqual(device, 0)
+        self.assertEqual(name, "USB Microphone")
+        self.assertEqual(error, "")
+
+    def test_reports_missing_input_without_using_invalid_default(self):
+        class FakeSD:
+            default = type("Default", (), {"device": (-1, -1)})()
+            @staticmethod
+            def query_devices(device=None):
+                return [{"name": "Speaker", "max_input_channels": 0}]
+        recorder = AudioRecorder(16000, 0.012, 8, 0.75)
+        device, _name, error = recorder._resolve_input_device(FakeSD)
+        self.assertIsNone(device)
+        self.assertIn("No microphone input device", error)
 
 
 class LocalFeatureHubTests(unittest.TestCase):

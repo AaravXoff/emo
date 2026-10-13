@@ -94,7 +94,7 @@ class EMOApplication:
         self.recorder = AudioRecorder(
             self.config.sample_rate, self.config.audio_rms_threshold,
             self.config.max_utterance_seconds, self.config.trailing_silence_seconds,
-            status=self.status,
+            status=self.status, input_device=self.config.audio_input_device,
         )
         mic_ok, mic_detail = self.recorder.check_device()
         self.status.set_boot_step("Microphone", "ok" if mic_ok else "warning", mic_detail)
@@ -216,12 +216,13 @@ class EMOApplication:
                 except KeyboardInterrupt:
                     break
                 except Exception as exc:
-                    log.exception("Audio loop error")
+                    # Avoid flooding logs if a microphone is unplugged or ALSA is not configured.
+                    log.warning("Audio loop recoverable error: %s", exc)
                     with self.status.lock:
                         self.status.last_error = str(exc)[:240]
                     self.status.set_boot_step("Microphone", "warning", str(exc)[:200])
-                    self.status.set_stage("Microphone unavailable", "Check microphone input and AUDIO_SAMPLE_RATE")
-                    time.sleep(2.0)
+                    self.status.set_stage("Microphone unavailable", "Check AUDIO_INPUT_DEVICE and AUDIO_SAMPLE_RATE")
+                    time.sleep(3.0)
         finally:
             self.close()
 

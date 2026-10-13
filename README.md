@@ -6,7 +6,7 @@ Repository: https://github.com/AaravXoff/emo
 
 ## Current capabilities
 
-- Local microphone input with energy-based voice activity detection and configurable wake phrase (`Hey EMO` by default).
+- Local microphone input with input-device auto-selection, energy-based voice activity detection and configurable wake phrase (`Hey EMO` by default).
 - Whisper.cpp or optional Python Whisper for language detection and transcription; Whisper.cpp can translate non-English speech to English and offline Argos Translate packs are also supported.
 - Local, low-latency intent handling for greetings, current time, weather, animal sound requests, and an original EMO tune.
 - LM Studio OpenAI-compatible endpoint for fallback questions (configured for Qwen 2.5 0.5B; use the exact model ID reported by your server).
@@ -115,6 +115,17 @@ pip install -r requirements-chatterbox.txt
 ```
 
 Use `TTS_ENGINE=auto` to try Chatterbox on larger machines and fall back to `espeak-ng` on low-RAM boards. To force a lightweight voice, set `TTS_ENGINE=espeak`. To explicitly attempt neural voice output on your Pi, set `TTS_ENGINE=chatterbox` and expect potential installation/memory problems.
+
+### Microphone troubleshooting
+
+A Raspberry Pi 3B+ does not have a built-in microphone. Connect a USB microphone or a supported audio-input adapter. List ALSA capture hardware with `arecord -l` and Python/PortAudio devices with:
+
+```bash
+source ~/emo/.venv/bin/activate
+python -c "import sounddevice as sd; print(sd.query_devices()); print('default device:', sd.default.device)"
+```
+
+EMO prefers a valid OS-default input and otherwise chooses the first detected input. To force a specific device, edit `AUDIO_INPUT_DEVICE` in `.env` to the device index (number) or exact device name shown by `sd.query_devices()`. Use `auto` to return to automatic selection. If a mic appears in the list but fails to open, check its supported sample rates and try `AUDIO_SAMPLE_RATE=16000`. When no capture device exists, EMO now reports a throttled warning rather than printing a traceback every two seconds.
 
 ## 3. Weather and time
 
