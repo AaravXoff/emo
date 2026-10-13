@@ -141,7 +141,7 @@ class EMOAssistant:
                             if not response:
                                 response = self.llm.complete(
                                     "Translate this assistant response into " + LANGUAGE_NAMES.get(language, language) +
-                                    ". Return only the translation and preserve names, numbers and units:\\n\\n" + response_en,
+                                    ". Return only the translation and preserve names, numbers and units:\n\n" + response_en,
                                     response_language=language,
                                 )
                     except Exception as exc:
