@@ -108,7 +108,7 @@ class EMOAssistant:
                 elif intent.name == "greeting":
                     response = self._greeting(language, original_text)
                 elif intent.name == "time":
-                    response = self._localized(TimeService.current_time(), language)
+                    response = self._localized(TimeService.current_time(self.config.time_zone), language)
                 elif intent.name == "weather":
                     city = intent.entity or self.config.weather_city
                     try:
