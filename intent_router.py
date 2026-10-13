@@ -74,7 +74,10 @@ class IntentRouter:
             searchable = original.rstrip(" .?!")
             match = re.search(r"\b(?:in|for|at)\s+([a-z][a-z .'-]{1,45})$", searchable, flags=re.I)
             if match:
-                city = re.sub(r"\\s+(today|now|tonight|tomorrow)$", "", match.group(1).strip(), flags=re.I).strip(" .?!")
+                city_words = match.group(1).strip().split()
+                if city_words and city_words[-1].casefold() in {"today", "now", "tonight", "tomorrow"}:
+                    city_words.pop()
+                city = " ".join(city_words).strip(" .?!")
             return Intent("weather", city, score)
 
         if re.search(r"\b(time|clock)\b", t) and re.search(r"\b(what|tell|current|now|time|clock)\b", t):
