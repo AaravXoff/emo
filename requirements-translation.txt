@@ -1,0 +1,2 @@
+# Optional offline language translation; install the needed language packs separately.
+argostranslate
