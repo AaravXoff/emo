@@ -46,6 +46,10 @@ class Config:
     whisper_model: str
     whisper_translation_model: str
     whisper_download_root: Path
+    whisper_backend: str
+    whisper_cpp_bin: Path
+    whisper_cpp_model: Path
+    whisper_cpp_threads: int
     preload_whisper: bool
     sample_rate: int
     audio_rms_threshold: float
@@ -86,6 +90,10 @@ class Config:
             whisper_model=os.getenv("WHISPER_MODEL", "tiny").strip().lower(),
             whisper_translation_model=os.getenv("WHISPER_TRANSLATION_MODEL", "tiny").strip().lower(),
             whisper_download_root=whisper_dir,
+            whisper_backend=os.getenv("WHISPER_BACKEND", "auto").strip().lower(),
+            whisper_cpp_bin=Path(os.getenv("WHISPER_CPP_BIN", str(Path.home() / "whisper.cpp" / "build" / "bin" / "whisper-cli"))).expanduser(),
+            whisper_cpp_model=Path(os.getenv("WHISPER_CPP_MODEL", str(Path.home() / "whisper.cpp" / "models" / "ggml-tiny.bin"))).expanduser(),
+            whisper_cpp_threads=max(1, _int("WHISPER_CPP_THREADS", 2)),
             preload_whisper=_bool("PRELOAD_WHISPER", False),
             sample_rate=_int("AUDIO_SAMPLE_RATE", 16000),
             audio_rms_threshold=_float("AUDIO_RMS_THRESHOLD", 0.012),
