@@ -16,7 +16,7 @@ from speech import WhisperRecognizer
 from feature_hub import FEATURES, LocalFeatureHub
 from audio_io import AudioRecorder, SoundEffects
 from assistant import EMOAssistant
-from services import TimeService
+from services import TimeService, WeatherService, WEATHER_CODES
 from tts_engine import SpeechEngine
 from config import Config, BASE_DIR
 from datetime import datetime
@@ -419,6 +419,51 @@ class TimeZoneTests(unittest.TestCase):
                 self.assertEqual(hub.current_datetime().tzinfo.key, "Pacific/Kiritimati")
             finally:
                 hub.close()
+
+
+class WeatherServiceTests(unittest.TestCase):
+    def test_weather_report_includes_freezing_rain_and_positive_precipitation(self):
+        service = WeatherService()
+        payloads = [
+            {"results": [{
+                "name": "Ludhiana", "admin1": "Punjab", "country": "India",
+                "latitude": 30.9, "longitude": 75.8
+            }]},
+            {"current": {
+                "weather_code": 66, "temperature_2m": 8.5, "apparent_temperature": 7.2,
+                "relative_humidity_2m": 82, "wind_speed_10m": 11.4, "precipitation": 0.8
+            }}
+        ]
+        with patch.object(service, "_get_json", side_effect=payloads) as get_json:
+            report = service.current("Ludhiana")
+        self.assertIn("light freezing rain", report)
+        self.assertIn("precipitation 0.8 millimetres", report)
+        self.assertEqual(get_json.call_count, 2)
+
+    def test_zero_or_invalid_precipitation_is_not_spoken(self):
+        service = WeatherService()
+        payloads = [
+            {"results": [{"name": "Delhi", "admin1": "Delhi", "country": "India",
+                          "latitude": 28.6, "longitude": 77.2}]},
+            {"current": {"weather_code": 3, "precipitation": 0}}
+        ]
+        with patch.object(service, "_get_json", side_effect=payloads):
+            report = service.current("Delhi")
+        self.assertIn("overcast", report)
+        self.assertNotIn("precipitation", report)
+
+    def test_additional_valid_weather_codes_are_described(self):
+        expected = {
+            56: "light freezing drizzle",
+            57: "dense freezing drizzle",
+            67: "heavy freezing rain",
+            77: "snow grains",
+            85: "slight snow showers",
+            86: "heavy snow showers",
+        }
+        for code, description in expected.items():
+            with self.subTest(code=code):
+                self.assertEqual(WEATHER_CODES[code], description)
 
 
 class SpeechOutputTests(unittest.TestCase):
