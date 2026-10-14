@@ -84,8 +84,13 @@ class IntentRouter:
 
         weather_cue = bool(re.search(r"\b(weather|forecast|rain|raining|mausam|temperature)\b", t))
         weather_score = self._best_match(t, self.weather_phrases, .68)
-        # Mentioning weather/temperature in a general question is not itself a request for a forecast.
-        if weather_cue and weather_score:
+        explanatory_context = bool(re.search(
+            r"\b(explain|define|why|how does|how do|what causes|affect|affects|physics|"
+            r"boiling point|melting point|of (?:a|an|the) (?:star|sun|planet|water|ice|steam|lava))\b",
+            t,
+        ))
+        # A current-conditions service should not answer science/definition questions.
+        if weather_cue and weather_score and not explanatory_context:
             city = ""
             searchable = original.rstrip(" .?!")
             match = re.search(r"\b(?:in|for|at|near)\s+([a-z][a-z .'-]{1,45})$", searchable, flags=re.I)

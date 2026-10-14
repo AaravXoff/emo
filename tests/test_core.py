@@ -92,6 +92,8 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(self.router.match("My clock is broken").name, "llm")
         self.assertEqual(self.router.match("What is the best time to plant roses?").name, "llm")
         self.assertEqual(self.router.match("Explain how temperature affects pressure").name, "llm")
+        self.assertEqual(self.router.match("What is the temperature of a star?").name, "llm")
+        self.assertEqual(self.router.match("Explain current weather patterns").name, "llm")
         self.assertEqual(self.router.match("What does the cat eat?").name, "llm")
         self.assertEqual(self.router.match("What's the temperature in Delhi today?").name, "weather")
         self.assertEqual(self.router.match("Is it raining in Delhi?").name, "weather")
