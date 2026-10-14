@@ -113,8 +113,14 @@ class EMOAssistant:
             "intent_confidence": intent.confidence,
         }
 
-        # Do not serve a stale clock answer. Weather is cached only for the short configured TTL.
-        if feature_result is None and cached and cached["route"] not in {"time", "animal_sound", "sing"}:
+        # Cache entries are reusable only when the current router still chooses the same route.
+        cache_route_matches = bool(
+            cached and (
+                cached["route"] == intent.name
+                or (intent.name == "llm" and cached["route"] == "llm")
+            )
+        )
+        if feature_result is None and cache_route_matches and cached["route"] not in {"time", "animal_sound", "sing"}:
             response = cached["response_text"]
             route = cached["route"]
             cache_hit = True

@@ -21,8 +21,8 @@ class IntentRouter:
             "what is up", "whats up", "thanks", "thank you",
         ]
         self.time_phrases = [
-            "what time is it", "what is the time", "tell me the time",
-            "current time", "time now", "what is today's time", "what is the current time",
+            "what time is it", "what time is it now", "whats the time", "what is the time", "tell me the time",
+            "current time", "time now", "time please", "what is today's time", "what is the current time",
             "do you know the time", "give me the time", "tell me what time it is",
             "can you tell me the time",
         ]
@@ -97,10 +97,8 @@ class IntentRouter:
             return Intent("weather", city, weather_score)
 
         time_score = self._best_match(t, self.time_phrases, .72)
-        time_word = bool(re.search(r"\b(time|clock)\b", t))
-        time_question = bool(re.search(r"\b(what|tell|current|now)\b", t))
-        if time_score or (time_word and time_question):
-            return Intent("time", confidence=time_score or .78)
+        if time_score:
+            return Intent("time", confidence=time_score)
 
         if t in self.greetings or self._best_match(t, self.greetings, .90):
             return Intent("greeting", confidence=.94)

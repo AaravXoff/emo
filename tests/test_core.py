@@ -90,6 +90,7 @@ class IntentTests(unittest.TestCase):
     def test_topic_mentions_do_not_become_time_weather_or_animal_commands(self):
         self.assertEqual(self.router.match("I have no time today").name, "llm")
         self.assertEqual(self.router.match("My clock is broken").name, "llm")
+        self.assertEqual(self.router.match("What is the best time to plant roses?").name, "llm")
         self.assertEqual(self.router.match("Explain how temperature affects pressure").name, "llm")
         self.assertEqual(self.router.match("What does the cat eat?").name, "llm")
         self.assertEqual(self.router.match("What's the temperature in Delhi today?").name, "weather")
@@ -321,6 +322,13 @@ class AssistantSafetyTests(unittest.TestCase):
             "calculate 12 * (3 + 4)", "en", "calculate 12 * (3 + 4)"
         )
         self.assertEqual(response, "The answer is 84.")
+
+    def test_old_llm_cache_cannot_shadow_new_direct_greeting(self):
+        self.assistant.cache.put(
+            "Hello EMO", "en", "llm", "stale unrelated answer", 3600
+        )
+        response = self.assistant.process("Hello EMO", "en", "Hello EMO")
+        self.assertEqual(response, "Hey! I'm EMO. What can I help you with?")
 
     def test_generated_password_is_not_saved_in_history_or_turn_log(self):
         response = self.assistant.process("generate password", "en", "generate password")
