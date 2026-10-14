@@ -95,6 +95,7 @@ class EMOApplication:
             self.config.sample_rate, self.config.audio_rms_threshold,
             self.config.max_utterance_seconds, self.config.trailing_silence_seconds,
             status=self.status, input_device=self.config.audio_input_device,
+            stop_event=self.stop_event,
         )
         mic_ok, mic_detail = self.recorder.check_device()
         self.status.set_boot_step("Microphone", "ok" if mic_ok else "warning", mic_detail)
@@ -229,9 +230,10 @@ class EMOApplication:
     def close(self) -> None:
         self.stop_event.set()
         self.thermal.stop()
-        self.hardware.close()
+        # Cancel pending timer callbacks before releasing optional hardware.
         if self.assistant is not None:
             self.assistant.close()
+        self.hardware.close()
         self.face.stop_server()
 
 

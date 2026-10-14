@@ -1,6 +1,7 @@
 from __future__ import annotations
 import tempfile
 import unittest
+import threading
 from pathlib import Path
 
 from intent_router import IntentRouter
@@ -155,6 +156,24 @@ class AudioDeviceSelectionTests(unittest.TestCase):
         device, _name, error = recorder._resolve_input_device(FakeSD)
         self.assertIsNone(device)
         self.assertIn("No microphone input device", error)
+
+    def test_uses_device_native_rate_when_16khz_is_not_supported(self):
+        class FakeSD:
+            @staticmethod
+            def check_input_settings(device, channels, dtype, samplerate):
+                if samplerate != 48000:
+                    raise ValueError("unsupported sample rate")
+            @staticmethod
+            def query_devices(device=None):
+                return {"name": "USB mic", "default_samplerate": 48000}
+        recorder = AudioRecorder(16000, 0.012, 8, 0.75)
+        self.assertEqual(recorder._resolve_sample_rate(FakeSD, 0), 48000)
+
+    def test_recording_stops_immediately_when_stop_event_is_set(self):
+        stop = threading.Event()
+        stop.set()
+        recorder = AudioRecorder(16000, 0.012, 8, 0.75, stop_event=stop)
+        self.assertIsNone(recorder.record_utterance())
 
 
 class AssistantSafetyTests(unittest.TestCase):

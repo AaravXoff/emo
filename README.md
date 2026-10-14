@@ -125,7 +125,7 @@ source ~/emo/.venv/bin/activate
 python -c "import sounddevice as sd; print(sd.query_devices()); print('default device:', sd.default.device)"
 ```
 
-EMO prefers a valid OS-default input and otherwise chooses the first detected input. To force a specific device, edit `AUDIO_INPUT_DEVICE` in `.env` to the device index (number) or exact device name shown by `sd.query_devices()`. Use `auto` to return to automatic selection. If a mic appears in the list but fails to open, check its supported sample rates and try `AUDIO_SAMPLE_RATE=16000`. When no capture device exists, EMO now reports a throttled warning rather than printing a traceback every two seconds.
+EMO prefers a valid OS-default input and otherwise chooses the first detected input. To force a specific device, edit `AUDIO_INPUT_DEVICE` in `.env` to the device index (number) or exact device name shown by `sd.query_devices()`. Use `auto` to return to automatic selection. EMO tries `AUDIO_SAMPLE_RATE` first; if the microphone does not support that rate, it tries the device's reported native rate and resamples to the model's required rate. When no capture device exists, EMO reports a throttled warning rather than printing a traceback every two seconds. The listening loop also observes shutdown signals so it does not wait for the full silence timeout when you stop the program.
 
 ## 3. Weather and time
 

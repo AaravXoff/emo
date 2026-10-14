@@ -7,6 +7,7 @@ import struct
 import subprocess
 import tempfile
 import time
+import threading
 import wave
 import logging
 
@@ -15,7 +16,8 @@ log = logging.getLogger(__name__)
 
 class AudioRecorder:
     def __init__(self, sample_rate: int, threshold: float, max_seconds: float,
-                 trailing_silence: float, status=None, input_device=None) -> None:
+                 trailing_silence: float, status=None, input_device=None,
+                 stop_event: threading.Event | None = None) -> None:
         self.sample_rate = sample_rate
         self.threshold = threshold
         self.max_seconds = max_seconds
@@ -24,6 +26,7 @@ class AudioRecorder:
         # None means auto-select: prefer the OS default input, then the first input device.
         # A configured integer selects a PortAudio device index; a string selects a device name.
         self.input_device = input_device
+        self.stop_event = stop_event
         self._last_device_warning = 0.0
 
     def _resolve_input_device(self, sd):
@@ -66,6 +69,35 @@ class AudioRecorder:
             self.status.set_boot_step("Microphone", "warning", detail)
             self.status.set_stage("Microphone unavailable", detail)
 
+    def _resolve_sample_rate(self, sd, device) -> int:
+        """Prefer the configured rate; fall back to the hardware's default and resample."""
+        try:
+            sd.check_input_settings(
+                device=device, channels=1, dtype="float32", samplerate=self.sample_rate
+            )
+            return self.sample_rate
+        except Exception as requested_error:
+            try:
+                info = sd.query_devices(device)
+                native_rate = int(round(float(info.get("default_samplerate", 0))))
+                if native_rate <= 0:
+                    raise RuntimeError("The device did not report a valid default sample rate.")
+                if native_rate == self.sample_rate:
+                    raise RuntimeError(f"The device reports {native_rate} Hz but rejected that rate.")
+                sd.check_input_settings(
+                    device=device, channels=1, dtype="float32", samplerate=native_rate
+                )
+                log.info(
+                    "Microphone does not support %s Hz; capturing at %s Hz and resampling to %s Hz.",
+                    self.sample_rate, native_rate, self.sample_rate,
+                )
+                return native_rate
+            except Exception as fallback_error:
+                raise RuntimeError(
+                    f"Microphone cannot open at {self.sample_rate} Hz and its default rate could not be used: "
+                    f"{fallback_error}"
+                ) from requested_error
+
     def check_device(self) -> tuple[bool, str]:
         try:
             import sounddevice as sd
@@ -78,6 +110,8 @@ class AudioRecorder:
 
     def record_utterance(self) -> str | None:
         """Wait for speech energy, record until silence, and return a temporary WAV path."""
+        if self.stop_event is not None and self.stop_event.is_set():
+            return None
         try:
             import numpy as np
             import sounddevice as sd
@@ -90,7 +124,15 @@ class AudioRecorder:
             time.sleep(2.0)
             return None
 
-        block_frames = max(400, int(self.sample_rate * 0.10))
+        try:
+            capture_rate = self._resolve_sample_rate(sd, device)
+        except Exception as exc:
+            self._audio_unavailable(f"Could not select a supported sample rate for {device_name!r}: {exc}")
+            if self.stop_event is None or not self.stop_event.is_set():
+                time.sleep(2.0)
+            return None
+
+        block_frames = max(400, int(capture_rate * 0.10))
         chunks = []
         began = False
         voiced_seconds = 0.0
@@ -98,9 +140,11 @@ class AudioRecorder:
         deadline = time.monotonic() + self.max_seconds + 12.0
         noise = 0.0
         try:
-            with sd.InputStream(device=device, samplerate=self.sample_rate, channels=1,
+            with sd.InputStream(device=device, samplerate=capture_rate, channels=1,
                                 dtype="float32", blocksize=block_frames) as stream:
-                while time.monotonic() < deadline:
+                while time.monotonic() < deadline and not (
+                    self.stop_event is not None and self.stop_event.is_set()
+                ):
                     block, _overflowed = stream.read(block_frames)
                     if block is None or len(block) == 0:
                         continue
@@ -114,24 +158,31 @@ class AudioRecorder:
                     if rms >= self.threshold:
                         began = True
                         chunks.append(mono)
-                        voiced_seconds += len(mono) / self.sample_rate
+                        voiced_seconds += len(mono) / capture_rate
                         silent_seconds = 0.0
                     elif began:
                         chunks.append(mono)
-                        silent_seconds += len(mono) / self.sample_rate
+                        silent_seconds += len(mono) / capture_rate
                     if began and (silent_seconds >= self.trailing_silence or voiced_seconds >= self.max_seconds):
                         break
-        except sd.PortAudioError as exc:
+        except Exception as exc:
             self._audio_unavailable(
-                f"Could not open microphone {device_name!r} at {self.sample_rate} Hz: {exc}. "
-                "Check the device index and supported sample rate."
+                f"Could not read microphone {device_name!r} at {capture_rate} Hz: {exc}. "
+                "Check the device index, connection and audio permissions."
             )
-            time.sleep(2.0)
+            if self.stop_event is None or not self.stop_event.is_set():
+                time.sleep(2.0)
             return None
 
+        if self.stop_event is not None and self.stop_event.is_set():
+            return None
         if not began or voiced_seconds < 0.18:
             return None
         audio = np.concatenate(chunks).clip(-1.0, 1.0)
+        if capture_rate != self.sample_rate and audio.size > 1:
+            target_count = max(1, int(round(audio.size * self.sample_rate / capture_rate)))
+            target_positions = np.linspace(0, audio.size - 1, num=target_count)
+            audio = np.interp(target_positions, np.arange(audio.size), audio).astype("float32")
         pcm = (audio * 32767).astype("<i2", copy=False).tobytes()
         fd, path = tempfile.mkstemp(prefix="emo-in-", suffix=".wav")
         os.close(fd)
