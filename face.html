@@ -5,13 +5,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>EMO Face</title>
 <style>
-:root{--eye:#00dcff;--lx:0px;--ly:0px;--motion-speed:1}
+:root{--eye:#00dcff;--lx:0px;--ly:0px;--motion-speed:1;--px:0%;--py:0%}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
 body{display:grid;place-items:center}
 #face{position:relative;width:min(100vw,133.333vh);aspect-ratio:4/3;background:radial-gradient(ellipse at 50% 43%,#031018 0%,#000 66%);overflow:hidden;--eye:#00dcff;isolation:isolate}
 #face::before{content:"";position:absolute;inset:-20%;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 50% 48%,color-mix(in srgb,var(--eye),transparent 88%) 0%,transparent 58%);opacity:.78;transform:scale(.94);animation:ambient-glow 6s cubic-bezier(.45,0,.55,1) infinite alternate}
-.eye{position:absolute;top:30%;width:28%;height:38%;background:var(--eye);border-radius:27%;box-shadow:0 0 12px var(--eye),0 0 30px color-mix(in srgb,var(--eye),transparent 48%);transform:translate(var(--lx),var(--ly));transform-origin:50% 50%;transition:transform .68s cubic-bezier(.22,1,.36,1),height .38s cubic-bezier(.22,1,.36,1),top .38s cubic-bezier(.22,1,.36,1),background .42s ease,border-radius .42s cubic-bezier(.22,1,.36,1),box-shadow .5s ease;will-change:transform,height}
+.eye{position:absolute;top:30%;width:28%;height:38%;background:var(--eye);border-radius:27%;overflow:hidden;box-shadow:0 0 12px var(--eye),0 0 30px color-mix(in srgb,var(--eye),transparent 48%);transform:translate(var(--lx),var(--ly));transform-origin:50% 50%;transition:transform .68s cubic-bezier(.22,1,.36,1),height .38s cubic-bezier(.22,1,.36,1),top .38s cubic-bezier(.22,1,.36,1),background .42s ease,border-radius .42s cubic-bezier(.22,1,.36,1),box-shadow .5s ease;will-change:transform,height}
+.eye::before{content:"";position:absolute;left:calc(50% + var(--px,0%));top:calc(50% + var(--py,0%));width:34%;height:47%;border-radius:50%;background:radial-gradient(ellipse at 38% 30%,#064555 0%,#00222d 48%,#00151e 100%);box-shadow:0 0 3px #00131b,inset 0 1px 2px #79ffff33;transform:translate(-50%,-50%) scale(var(--pupil-scale,1));transition:left .46s cubic-bezier(.22,1,.36,1),top .46s cubic-bezier(.22,1,.36,1),width .28s ease,height .28s ease,transform .35s cubic-bezier(.22,1,.36,1);z-index:1}
+.eye-glint{position:absolute;left:calc(34% + var(--px,0%)*.35);top:calc(24% + var(--py,0%)*.35);width:14%;height:16%;border-radius:50%;background:#fff;box-shadow:0 0 4px 1px #eaffff;opacity:.98;transform:scale(var(--glint-scale,1));transform-origin:center;transition:left .46s cubic-bezier(.22,1,.36,1),top .46s cubic-bezier(.22,1,.36,1),transform .3s ease;z-index:2;pointer-events:none}
+.eye-glint::after{content:"";position:absolute;right:-85%;bottom:-105%;width:43%;height:43%;border-radius:50%;background:#eaffff;opacity:.8}
+#face[data-state=excited] .eye::before{--pupil-scale:1.24;width:31%;height:43%}
+#face[data-state=happy] .eye::before{width:32%;height:38%}
+#face[data-state=sleepy] .eye::before,#face[data-state=bored] .eye::before{height:34%;opacity:.7}
+#face[data-state=sad] .eye::before{top:61%}
+#face[data-state=angry] .eye::before{width:27%;height:40%}
+#face[data-state=thinking] .eye-glint{animation:glint-shimmer 1.8s ease-in-out infinite alternate}
+#face[data-state=excited] .eye-glint,#face[data-state=dance] .eye-glint{animation:glint-sparkle .55s cubic-bezier(.34,1.56,.64,1) infinite alternate}
+#face[data-state=love] .eye-glint{background:#fff2fc;box-shadow:0 0 6px 2px #fff}
+#face[data-state=overheat] .eye::before{background:#3b0906;box-shadow:0 0 3px #ffb09a}
+#face[data-state=error] .eye-glint{opacity:.4}
 #face[data-state=idle] .eye{animation:idle-float 4.8s cubic-bezier(.45,0,.55,1) infinite,idle-glow 3.8s ease-in-out infinite alternate}
 #face[data-state=idle] .right{animation-delay:-2.1s,-1.4s}
 .left{left:12%}.right{right:12%}
@@ -65,6 +78,8 @@ body{display:grid;place-items:center}
 #camera-dot.found{background:#28ff6e;box-shadow:0 0 5px #28ff6e}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes ambient-glow{from{opacity:.42;transform:scale(.92)}to{opacity:.9;transform:scale(1.08)}}
+@keyframes glint-shimmer{from{opacity:.62;filter:brightness(.9)}to{opacity:1;filter:brightness(1.35)}}
+@keyframes glint-sparkle{from{transform:scale(.75) rotate(-12deg);opacity:.6}to{transform:scale(1.28) rotate(15deg);opacity:1}}
 @keyframes idle-float{0%,100%{translate:0 0}50%{translate:0 -2px}}
 @keyframes idle-glow{from{filter:saturate(.92);box-shadow:0 0 12px var(--eye),0 0 28px color-mix(in srgb,var(--eye),transparent 52%)}to{filter:saturate(1.12);box-shadow:0 0 17px var(--eye),0 0 42px color-mix(in srgb,var(--eye),transparent 39%)}}
 @keyframes mouth{from{transform:translateX(-50%) scaleY(.35)}to{transform:translateX(-50%) scaleY(1.2)}}
@@ -103,7 +118,7 @@ body{display:grid;place-items:center}
 <div id="face" data-state="boot" data-talking="false" data-overheat="false" data-boot-complete="false">
   <div class="boot-screen" id="boot-screen"><div class="boot-brand">EMO</div><div class="boot-caption">Local AI assistant</div><div class="boot-loader"></div><div class="boot-stage" id="boot-stage">Starting services…</div><div class="boot-message" id="boot-message">Preparing the robot</div><div class="boot-steps" id="boot-steps"></div></div>
   <div class="spinner"></div><div class="heart">♥</div>
-  <div class="eye left"></div><div class="eye right"></div>
+  <div class="eye left"><span class="eye-glint"></span></div><div class="eye right"><span class="eye-glint"></span></div>
   <div class="mouth"></div><div class="flames"></div>
   <div id="temperature" class="hud">--°C</div><div id="camera-dot" class="hud" title="Camera status"></div>
 </div>
@@ -132,28 +147,69 @@ async function updateFace(){try{const r=await fetch('/api/state',{cache:'no-stor
 setInterval(updateFace,250);updateFace();
 const prefersReducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(!prefersReducedMotion){
-  let nextBlink=performance.now()+2500;
-  function idleBlink(now){
-    if(face.dataset.state==='idle'&&now>=nextBlink){
-      face.classList.add('auto-blink');
-      setTimeout(()=>face.classList.remove('auto-blink'),145);
-      nextBlink=now+2400+Math.random()*2600;
-    }
-    requestAnimationFrame(idleBlink);
+  const eyes=[...face.querySelectorAll('.eye')];
+  let blinkTimer=null;
+  function blink(duration=125){
+    if(['blink','wink','overheat','error','boot'].includes(face.dataset.state))return;
+    face.classList.add('auto-blink');
+    setTimeout(()=>face.classList.remove('auto-blink'),duration);
   }
-  requestAnimationFrame(idleBlink);
+  function scheduleBlink(){
+    const state=face.dataset.state;
+    const delay=state==='sleepy'?900+Math.random()*1200:2300+Math.random()*3100;
+    blinkTimer=setTimeout(()=>{
+      if(state!=='sleepy'&&Math.random()<.22){
+        blink(105);
+        setTimeout(()=>blink(95),210);
+      }else{
+        blink(state==='sleepy'?190:125);
+      }
+      scheduleBlink();
+    },delay);
+  }
+  scheduleBlink();
 
-  // Choose small gaze targets occasionally; CSS easing makes movement glide instead of jump.
-  let gazeTimer;
+  // Inner pupils move independently from the eye shells for a lively, focused gaze.
+  function gazeFor(state,index){
+    const side=index===0?-1:1;
+    const rand=(n)=>((Math.random()*2-1)*n);
+    if(state==='thinking')return [side*-7,-8+rand(2)];
+    if(state==='curious')return [index===0?7:-6,-2+rand(2)];
+    if(state==='sad')return [rand(2),7+rand(1.5)];
+    if(state==='sleepy'||state==='bored')return [side*2,6+rand(1)];
+    if(state==='listening')return [rand(2),rand(1.5)];
+    if(state==='excited')return [rand(7),rand(4)];
+    if(state==='dance')return [Math.sin(performance.now()/240+index)*8,Math.cos(performance.now()/320+index)*5];
+    if(state==='happy')return [rand(4),-1+rand(2)];
+    if(state==='love')return [side*3,rand(2)];
+    if(state==='angry'||state==='focus')return [side*-2,2];
+    if(state==='idle')return [rand(8),rand(6)];
+    return [rand(2),rand(2)];
+  }
+  function movePupils(){
+    const state=face.dataset.state||'idle';
+    eyes.forEach((eye,index)=>{
+      const [x,y]=gazeFor(state,index);
+      eye.style.setProperty('--px',x.toFixed(1)+'%');
+      eye.style.setProperty('--py',y.toFixed(1)+'%');
+      eye.style.setProperty('--pupil-scale',state==='excited'?'1.2':'1');
+    });
+    const delay=state==='dance'?160:state==='thinking'?850:1050+Math.random()*800;
+    setTimeout(movePupils,delay);
+  }
+  movePupils();
+
+  // Tiny outer-eye drift adds life without a heavy render loop.
   function lookAround(){
-    if(face.dataset.state==='idle'){
-      face.style.setProperty('--lx',(Math.random()*10-5).toFixed(1)+'px');
-      face.style.setProperty('--ly',(Math.random()*6-3).toFixed(1)+'px');
+    const state=face.dataset.state;
+    if(state==='idle'||state==='curious'||state==='happy'){
+      face.style.setProperty('--lx',(Math.random()*8-4).toFixed(1)+'px');
+      face.style.setProperty('--ly',(Math.random()*5-2.5).toFixed(1)+'px');
     }else{
       face.style.setProperty('--lx','0px');
       face.style.setProperty('--ly','0px');
     }
-    gazeTimer=setTimeout(lookAround,1800+Math.random()*2500);
+    setTimeout(lookAround,2100+Math.random()*1900);
   }
   lookAround();
 }

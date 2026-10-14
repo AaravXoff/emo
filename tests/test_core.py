@@ -136,6 +136,10 @@ class FaceAnimationAssetTests(unittest.TestCase):
         self.assertIn("@keyframes ambient-glow", face_html)
         self.assertIn("@keyframes idle-float", face_html)
         self.assertIn("@keyframes dance-eye", face_html)
+        self.assertIn(".eye::before", face_html)
+        self.assertIn("function gazeFor(state,index)", face_html)
+        self.assertIn("@keyframes glint-sparkle", face_html)
+        self.assertIn("scheduleBlink()", face_html)
         self.assertIn("prefers-reduced-motion:reduce", face_html.replace(" ", ""))
         self.assertIn("window.matchMedia('(prefers-reduced-motion: reduce)')", face_html)
 
