@@ -159,8 +159,15 @@ class AssistantSafetyTests(unittest.TestCase):
             pass
 
     class FakeSpeech:
+        def __init__(self):
+            self.last_text = ""
+            self.face = None
+            self.expression_during_speech = ""
+
         def speak(self, text, language="en"):
             self.last_text = text
+            if self.face is not None:
+                self.expression_during_speech = self.face.get_state()
             return True
 
     class FakeTranslator:
@@ -169,8 +176,11 @@ class AssistantSafetyTests(unittest.TestCase):
             return None
 
     class FakeLLM:
-        @staticmethod
-        def complete(*args, **kwargs):
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, *args, **kwargs):
+            self.calls += 1
             return "fallback answer"
 
     def setUp(self):
@@ -187,9 +197,11 @@ class AssistantSafetyTests(unittest.TestCase):
         self.status = RobotStatus()
         self.face = HtmlFace(status=self.status)
         self.speech = self.FakeSpeech()
+        self.speech.face = self.face
+        self.llm = self.FakeLLM()
         self.assistant = EMOAssistant(
             self.config, self.status, self.face, self.FakeHardware(), None,
-            self.FakeTranslator(), self.FakeLLM(), self.speech,
+            self.FakeTranslator(), self.llm, self.speech,
         )
 
     def tearDown(self):
@@ -217,6 +229,18 @@ class AssistantSafetyTests(unittest.TestCase):
         self.assertNotIn(secret, history_text)
         self.assertNotIn(secret, logged)
         self.assertEqual(logged, "[redacted: generated password]")
+
+    def test_password_is_not_sent_to_translation_model(self):
+        self.assistant.process("generate password", "hi", "generate password")
+        self.assertEqual(self.llm.calls, 0)
+
+    def test_malformed_date_does_not_crash_turn(self):
+        response = self.assistant.process("days until 2026-02-30", "en", "days until 2026-02-30")
+        self.assertIn("Please rephrase", response)
+
+    def test_face_command_uses_requested_expression_while_speaking(self):
+        self.assistant.process("be happy", "en", "be happy")
+        self.assertEqual(self.speech.expression_during_speech, "happy")
 
 
 class LocalFeatureHubTests(unittest.TestCase):

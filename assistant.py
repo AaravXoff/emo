@@ -88,7 +88,17 @@ class EMOAssistant:
         intent = self.router.match(english_text)
         # Run newly added local tools before consulting old cache entries: an old LLM
         # response for an identical prompt must not shadow a deterministic local command.
-        feature_result = self.features.handle(english_text) if intent.name == "llm" else None
+        feature_result = None
+        if intent.name == "llm":
+            try:
+                feature_result = self.features.handle(english_text)
+            except Exception:
+                # A malformed date or unusually large value should not crash the whole turn.
+                log.exception("Local feature parsing failed")
+                feature_result = (
+                    "feature_error",
+                    "I couldn't process that local command safely. Please rephrase it.",
+                )
         started = time.monotonic()
         cache_hit = False
         cached = self.cache.get(original_text, language)
@@ -145,9 +155,12 @@ class EMOAssistant:
                     feature = feature_result
                     if feature:
                         route, feature_response = feature
-                        response = feature_response if language == "en" else self._localized(feature_response, language)
-                        if route.startswith("face_"):
-                            self.face.set_state(route[5:], duration=2.5)
+                        # Do not send generated credentials through a translation model.
+                        response = (
+                            feature_response
+                            if language == "en" or route == "password_generator"
+                            else self._localized(feature_response, language)
+                        )
                     else:
                         self.face.set_state("thinking")
                         self.status.set_stage("Thinking", "Sending the question to the local LM Studio model")
@@ -202,7 +215,10 @@ class EMOAssistant:
             original_text, language, english_text, route, logged_response, cache_hit=cache_hit,
             process={**process_data, "elapsed_seconds": round(time.monotonic() - started, 3)},
         )
-        expression = {"greeting": "happy", "sing": "dance", "animal_sound": "excited"}.get(route, "talking")
+        if route.startswith("face_"):
+            expression = route[len("face_"):]
+        else:
+            expression = {"greeting": "happy", "sing": "dance", "animal_sound": "excited"}.get(route, "talking")
         self._speak(response, language, expression=expression)
         self.status.set_stage("Listening", "Say a wake phrase followed by a request")
         return response
