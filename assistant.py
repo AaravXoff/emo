@@ -32,7 +32,10 @@ class EMOAssistant:
         self._history: list[dict] = []
         self._speech_lock = threading.RLock()
         self._closing = False
-        self.features = LocalFeatureHub(config.data_dir, status, face, hardware, notify=self._timer_notify)
+        self.features = LocalFeatureHub(
+            config.data_dir, status, face, hardware,
+            notify=self._timer_notify, time_zone=config.time_zone,
+        )
 
     def _localized(self, english_text: str, language: str) -> str:
         if language == "en":

@@ -123,10 +123,18 @@ class SpeechEngine:
         if not executable:
             return False
         voice = ESPEAK_VOICES.get(language, "en-us")
-        try:
-            subprocess.run([executable, "-v", voice, "-s", "165", text],
-                           check=False, timeout=45, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except Exception as exc:
-            log.warning("espeak playback failed: %s", exc)
-            return False
+        candidates = [voice] if voice == "en-us" else [voice, "en-us"]
+        for candidate in candidates:
+            try:
+                result = subprocess.run(
+                    [executable, "-v", candidate, "-s", "165", text],
+                    check=False, timeout=45, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                if result.returncode == 0:
+                    if candidate != voice:
+                        log.info("Voice %s is unavailable; using en-us fallback.", voice)
+                    return True
+                log.debug("espeak voice %s exited with status %s", candidate, result.returncode)
+            except Exception as exc:
+                log.warning("espeak playback failed for voice %s: %s", candidate, exc)
+        return False

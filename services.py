@@ -1,6 +1,7 @@
 """Time and current-weather direct-action services."""
 from __future__ import annotations
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import json
 import urllib.parse
 import urllib.request
@@ -39,7 +40,10 @@ class TimeService:
             return f"It is {clock} on {day_name}, {month_name} {day}, in {zone}."
         except Exception as exc:
             log.debug("Time API unavailable; using local Pi clock: %s", exc)
-            now = datetime.now().astimezone()
+            try:
+                now = datetime.now(ZoneInfo(time_zone))
+            except Exception:
+                now = datetime.now().astimezone()
             return f"It is {now.strftime('%I:%M %p').lstrip('0')} on {now.strftime('%A, %B')} {now.day}."
 
 

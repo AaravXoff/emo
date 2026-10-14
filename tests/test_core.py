@@ -10,8 +10,12 @@ from html_face import HtmlFace
 from state import RobotStatus
 from speech import WhisperRecognizer
 from feature_hub import FEATURES, LocalFeatureHub
-from audio_io import AudioRecorder
+from audio_io import AudioRecorder, SoundEffects
 from assistant import EMOAssistant
+from services import TimeService
+from tts_engine import SpeechEngine
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 import json
 
@@ -241,6 +245,59 @@ class AssistantSafetyTests(unittest.TestCase):
     def test_face_command_uses_requested_expression_while_speaking(self):
         self.assistant.process("be happy", "en", "be happy")
         self.assertEqual(self.speech.expression_during_speech, "happy")
+
+
+class TimeZoneTests(unittest.TestCase):
+    def test_time_service_offline_fallback_uses_configured_zone(self):
+        zone = ZoneInfo("Pacific/Kiritimati")
+        before = datetime.now(zone)
+        with patch("services.urllib.request.urlopen", side_effect=OSError("offline")):
+            response = TimeService.current_time("Pacific/Kiritimati", timeout=0.1)
+        after = datetime.now(zone)
+        acceptable_dates = {
+            before.strftime("%A, %B") + f" {before.day}",
+            after.strftime("%A, %B") + f" {after.day}",
+        }
+        self.assertTrue(any(value in response for value in acceptable_dates), response)
+
+    def test_feature_hub_uses_configured_zone_for_calendar(self):
+        with tempfile.TemporaryDirectory() as temp:
+            hub = LocalFeatureHub(Path(temp), time_zone="Pacific/Kiritimati")
+            try:
+                self.assertEqual(hub.current_datetime().tzinfo.key, "Pacific/Kiritimati")
+            finally:
+                hub.close()
+
+
+class SpeechOutputTests(unittest.TestCase):
+    class Result:
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    def test_espeak_retries_english_when_requested_voice_fails(self):
+        engine = SpeechEngine("espeak")
+        with patch("tts_engine.shutil.which", return_value="/usr/bin/espeak-ng"), patch(
+            "tts_engine.subprocess.run",
+            side_effect=[self.Result(1), self.Result(0)],
+        ) as run:
+            self.assertTrue(engine._speak_espeak("hello", "pa"))
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args_list[0].args[0][2], "pa")
+        self.assertEqual(run.call_args_list[1].args[0][2], "en-us")
+
+    def test_espeak_reports_failure_when_all_voices_fail(self):
+        engine = SpeechEngine("espeak")
+        with patch("tts_engine.shutil.which", return_value="/usr/bin/espeak-ng"), patch(
+            "tts_engine.subprocess.run",
+            side_effect=[self.Result(1), self.Result(1)],
+        ):
+            self.assertFalse(engine._speak_espeak("hello", "pa"))
+
+    def test_sound_effect_reports_aplay_failure(self):
+        effect = SoundEffects()
+        effect.player = "/usr/bin/aplay"
+        with patch("audio_io.subprocess.run", return_value=self.Result(1)):
+            self.assertFalse(effect._play_samples([0, 10]))
 
 
 class LocalFeatureHubTests(unittest.TestCase):

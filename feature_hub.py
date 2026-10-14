@@ -4,6 +4,7 @@ import ast, base64, datetime as dt, json, math, os, platform, random, re
 import shutil, socket, sqlite3, statistics, string, threading, time, urllib.parse, uuid
 from pathlib import Path
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 FEATURES = (
     # Calendar/date: 12
@@ -102,9 +103,11 @@ def slugify(text):
 
 class LocalFeatureHub:
     """100+ deterministic commands; persistence is local to data/emo_features.sqlite3."""
-    def __init__(self,data_dir:Path,status=None,face=None,hardware=None,notify:Callable[[str],None]|None=None):
+    def __init__(self,data_dir:Path,status=None,face=None,hardware=None,notify:Callable[[str],None]|None=None,
+                 time_zone:str="Asia/Kolkata"):
         self.data_dir=Path(data_dir); self.data_dir.mkdir(parents=True,exist_ok=True)
         self.status,self.face,self.hardware,self.notify=status,face,hardware,notify
+        self.time_zone = (time_zone or "Asia/Kolkata").strip()
         self.lock=threading.RLock(); self.timers={}
         self.db=sqlite3.connect(str(self.data_dir/"emo_features.sqlite3"),check_same_thread=False,timeout=10)
         self.db.row_factory=sqlite3.Row
@@ -120,8 +123,14 @@ class LocalFeatureHub:
     def catalog(self): return list(FEATURES)
     @staticmethod
     def fmt(x): return f"{x:.10g}" if isinstance(x,float) and math.isfinite(x) else str(x)
-    @staticmethod
-    def now_text(): return dt.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    def current_datetime(self):
+        try:
+            return dt.datetime.now(ZoneInfo(self.time_zone))
+        except Exception:
+            # Invalid zone or a missing system tz database: stay usable with the OS local zone.
+            return dt.datetime.now().astimezone()
+
+    def now_text(self): return self.current_datetime().strftime("%Y-%m-%d %H:%M:%S %Z")
     @staticmethod
     def numbers(s): return [float(v) for v in re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)",s)]
 
@@ -236,7 +245,7 @@ class LocalFeatureHub:
         if t in {"process status","what process am i running in","runtime status"}:return "process_status",f"EMO process ID is {os.getpid()}; Python thread count is {threading.active_count()}."
 
         # Calendar/date commands.
-        now=dt.datetime.now().astimezone()
+        now=self.current_datetime()
         if t in {"what date is it","what is today's date","today's date","current date","date today"}:return "current_date","Today is "+now.strftime("%A, %B %d, %Y")+"."
         if t in {"what day is it","what day of the week is it","day today","what weekday is it"}:return "weekday","Today is "+now.strftime("%A")+"."
         if t in {"what year is it","current year"}:return "year",f"The current year is {now.year}."
@@ -292,7 +301,10 @@ class LocalFeatureHub:
             return "factorial",f"{n}! is {math.factorial(n)}."
         m=re.match(r"^is\s+(\d+)\s+(?:a )?prime$",t)
         if m:
-            n=int(m.group(1));return "prime_check",f"{n} is {'prime' if is_prime(n) else 'not prime'}."
+            n=int(m.group(1))
+            if n > 10**12:
+                return "prime_check", "For speed on the Pi, I can check primality up to 1,000,000,000,000."
+            return "prime_check",f"{n} is {'prime' if is_prime(n) else 'not prime'}."
         m=re.match(r"^(?:list )?primes up to\s+(\d+)$",t)
         if m:
             n=int(m.group(1))

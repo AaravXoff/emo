@@ -194,9 +194,11 @@ class SoundEffects:
                 output.setframerate(self.SAMPLE_RATE)
                 output.writeframes(struct.pack("<" + "h" * len(samples), *samples))
             if self.player:
-                subprocess.run([self.player, "-q", path], check=False, timeout=6,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return True
+                result = subprocess.run([self.player, "-q", path], check=False, timeout=6,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if result.returncode != 0:
+                    log.debug("aplay exited with status %s", result.returncode)
+                return result.returncode == 0
             return False
         except Exception as exc:
             log.debug("Effect playback failed: %s", exc)
