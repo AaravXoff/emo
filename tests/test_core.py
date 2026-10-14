@@ -129,6 +129,16 @@ class CacheTests(unittest.TestCase):
             cache.close()
 
 
+class FaceAnimationAssetTests(unittest.TestCase):
+    def test_face_has_smooth_motion_and_reduced_motion_support(self):
+        face_html = (Path(__file__).resolve().parents[1] / "face.html").read_text(encoding="utf-8")
+        self.assertIn("cubic-bezier(.22,1,.36,1)", face_html)
+        self.assertIn("@keyframes ambient-glow", face_html)
+        self.assertIn("@keyframes idle-float", face_html)
+        self.assertIn("@keyframes dance-eye", face_html)
+        self.assertIn("prefers-reduced-motion:reduce", face_html.replace(" ", ""))
+        self.assertIn("window.matchMedia('(prefers-reduced-motion: reduce)')", face_html)
+
 class FaceApiTests(unittest.TestCase):
     def test_state_endpoint_exposes_boot_status(self):
         status = RobotStatus()
