@@ -175,7 +175,7 @@ Tests exercise direct-intent routing, wake-phrase stripping, cache keys and cont
 - Set `TOUCH_GPIO` and `SERVO_GPIO` only after confirming physical pin numbering and signal wiring; `0` disables the optional component.
 - Do not power a servo directly from a GPIO pin. Use a suitable external servo supply and a common ground.
 - Thermal monitoring requests a pause for heavy inference at the configured critical temperature and resumes after cooling.
-- No raw microphone audio is kept. Transcribed text and answers are stored locally in `data/emo_cache.sqlite3`. Set `CACHE_ENABLED=false` to disable the text cache/log, or remove the database when you want to erase its history.
+- No raw microphone audio is kept. Transcripts and answers are stored locally in `data/emo_cache.sqlite3`. Set `CACHE_ENABLED=false` to disable that text cache/log. Saved notes and to-dos live separately in `data/emo_features.sqlite3` and remain when the transcript cache is disabled; remove the corresponding database file to erase each store. Relative data/cache paths are resolved from the project directory, not the shell's current directory.
 - Weather requires connectivity. LM Studio must be reachable for fallback Q&A. Direct greeting/time/animal/tune actions can work without LM Studio.
 
 ## Local feature hub (100+ commands)

@@ -2,6 +2,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import threading
+import os
 from pathlib import Path
 
 from intent_router import IntentRouter
@@ -15,10 +16,49 @@ from audio_io import AudioRecorder, SoundEffects
 from assistant import EMOAssistant
 from services import TimeService
 from tts_engine import SpeechEngine
+from config import Config, BASE_DIR
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
 import json
+
+
+class ConfigValidationTests(unittest.TestCase):
+    def test_invalid_values_use_safe_defaults_and_relative_paths_anchor_to_project(self):
+        overrides = {
+            "AUDIO_SAMPLE_RATE": "0",
+            "AUDIO_RMS_THRESHOLD": "nan",
+            "MAX_UTTERANCE_SECONDS": "-1",
+            "TRAILING_SILENCE_SECONDS": "99",
+            "WHISPER_CPP_THREADS": "999",
+            "LM_STUDIO_TIMEOUT_SECONDS": "0",
+            "WAKE_TIMEOUT_SECONDS": "9999",
+            "TOUCH_GPIO": "999",
+            "THERMAL_WARNING_C": "90",
+            "THERMAL_LOCKOUT_C": "80",
+            "THERMAL_RESUME_C": "85",
+            "WAKE_WORDS": "",
+            "EMO_DATA_DIR": "./relative-emo-data",
+            "EMO_CACHE_DB": "./relative-cache.sqlite3",
+        }
+        with patch.dict(os.environ, overrides, clear=False):
+            config = Config.from_env()
+
+        self.assertEqual(config.sample_rate, 16000)
+        self.assertEqual(config.audio_rms_threshold, 0.012)
+        self.assertEqual(config.max_utterance_seconds, 8.0)
+        self.assertEqual(config.trailing_silence_seconds, 0.75)
+        self.assertEqual(config.whisper_cpp_threads, 2)
+        self.assertEqual(config.lm_studio_timeout_seconds, 35)
+        self.assertEqual(config.wake_timeout_seconds, 20)
+        self.assertEqual(config.touch_gpio, 0)
+        self.assertEqual(
+            (config.thermal_warning_c, config.thermal_lockout_c, config.thermal_resume_c),
+            (75.0, 82.0, 72.0),
+        )
+        self.assertTrue(config.wake_words)
+        self.assertEqual(config.data_dir, (BASE_DIR / "relative-emo-data").resolve())
+        self.assertEqual(config.cache_db, (BASE_DIR / "relative-cache.sqlite3").resolve())
 
 
 class IntentTests(unittest.TestCase):
