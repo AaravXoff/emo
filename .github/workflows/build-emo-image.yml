@@ -116,9 +116,22 @@ jobs:
 
           mapfile -t packages < <(awk -F: 'NF {print ($2 != "" ? $2 : $1)}' pi-gen/depends | sort -u)
           sudo apt-get install -y "${packages[@]}"
-          if command -v update-binfmts >/dev/null 2>&1; then
-            sudo update-binfmts --enable 2>/dev/null || true
+
+          # pi-gen must execute ARM64 binaries inside its chroot on this x86_64 runner.
+          # Explicitly mount binfmt_misc and enable QEMU registration instead of hiding errors.
+          sudo modprobe binfmt_misc
+          if ! mountpoint -q /proc/sys/fs/binfmt_misc; then
+            sudo mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc
           fi
+          sudo update-binfmts --enable qemu-aarch64
+          if [[ ! -r /proc/sys/fs/binfmt_misc/qemu-aarch64 ]]; then
+            echo "QEMU ARM64 binfmt registration is missing." >&2
+            sudo update-binfmts --display qemu-aarch64 || true
+            ls -la /proc/sys/fs/binfmt_misc >&2 || true
+            exit 1
+          fi
+          grep -q '^enabled' /proc/sys/fs/binfmt_misc/qemu-aarch64
+          arch-test arm64
 
           cp -a image/stage2/99-emo pi-gen/stage2/
           mkdir -p pi-gen/stage2/99-emo/files/emo pi-gen/stage2/99-emo/files/whisper
