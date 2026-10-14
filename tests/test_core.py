@@ -144,6 +144,28 @@ class FaceAnimationAssetTests(unittest.TestCase):
         self.assertIn("window.matchMedia('(prefers-reduced-motion: reduce)')", face_html)
 
 class FaceApiTests(unittest.TestCase):
+    def test_server_can_stop_and_restart_cleanly(self):
+        face = HtmlFace(port=0)
+        try:
+            face.start_server()
+            first_server = face.server
+            first_thread = face.server_thread
+            self.assertIsNotNone(first_server)
+            self.assertIsNotNone(first_thread)
+            self.assertTrue(first_thread.is_alive())
+
+            face.stop_server()
+            self.assertIsNone(face.server)
+            self.assertIsNone(face.server_thread)
+            self.assertFalse(first_thread.is_alive())
+
+            face.start_server()
+            self.assertIsNotNone(face.server)
+            self.assertIsNot(face.server, first_server)
+            self.assertTrue(face.server_thread.is_alive())
+        finally:
+            face.stop_server()
+
     def test_state_endpoint_exposes_boot_status(self):
         status = RobotStatus()
         face = HtmlFace(status=status)

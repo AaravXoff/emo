@@ -45,19 +45,21 @@ class HtmlFace:
 
         self.server = None
         self.server_thread = None
+        self._server_lock = threading.RLock()
 
     def start_server(self):
         logging.getLogger("werkzeug").setLevel(logging.ERROR)
-        if self.server_thread and self.server_thread.is_alive():
-            return
-        self.server = make_server(self.host, self.port, self.app, threaded=True)
-        self.server_thread = threading.Thread(
-            target=self.server.serve_forever,
-            daemon=True,
-            name="EMO-HTML-Server",
-        )
-        self.server_thread.start()
-        print(f"EMO HTML face: http://{self.host}:{self.port}/")
+        with self._server_lock:
+            if self.server_thread and self.server_thread.is_alive():
+                return
+            self.server = make_server(self.host, self.port, self.app, threaded=True)
+            self.server_thread = threading.Thread(
+                target=self.server.serve_forever,
+                daemon=True,
+                name="EMO-HTML-Server",
+            )
+            self.server_thread.start()
+            print(f"EMO HTML face: http://{self.host}:{self.port}/")
 
     def set_state(self, state, duration=None):
         with self.lock:
@@ -118,7 +120,14 @@ class HtmlFace:
         }
 
     def stop_server(self):
-        if self.server is not None:
-            self.server.shutdown()
-            self.server.server_close()
+        # Keep start/stop serialized so a quick restart cannot race a still-exiting thread.
+        with self._server_lock:
+            server = self.server
+            thread = self.server_thread
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(timeout=3.0)
             self.server = None
+            self.server_thread = thread if thread is not None and thread.is_alive() else None
