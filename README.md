@@ -125,7 +125,7 @@ source ~/emo/.venv/bin/activate
 python -c "import sounddevice as sd; print(sd.query_devices()); print('default device:', sd.default.device)"
 ```
 
-EMO prefers a valid OS-default input and otherwise chooses the first detected input. To force a specific device, edit `AUDIO_INPUT_DEVICE` in `.env` to the device index (number) or exact device name shown by `sd.query_devices()`. Use `auto` to return to automatic selection. EMO tries `AUDIO_SAMPLE_RATE` first; if the microphone does not support that rate, it tries the device's reported native rate and resamples to the model's required rate. When no capture device exists, EMO reports a throttled warning rather than printing a traceback every two seconds. The listening loop also observes shutdown signals so it does not wait for the full silence timeout when you stop the program.
+EMO prefers a valid OS-default input and otherwise chooses the first detected input. To force a specific device, edit `AUDIO_INPUT_DEVICE` in `.env` to the device index (number) or a unique substring of the device name shown by `sd.query_devices()`. Use `auto` to return to automatic selection. EMO tries `AUDIO_SAMPLE_RATE` first; if the microphone does not support that rate, it tries the device's reported native rate and resamples to the model's required rate. When no capture device exists, EMO reports a throttled warning rather than printing a traceback every two seconds. The listening loop also observes shutdown signals so it does not wait for the full silence timeout when you stop the program.
 
 ## 3. Weather and time
 
@@ -172,7 +172,7 @@ Tests exercise direct-intent routing, wake-phrase stripping, cache keys and cont
 
 ## 7. Hardware and safety notes
 
-- Set `TOUCH_GPIO` and `SERVO_GPIO` only after confirming physical pin numbering and signal wiring; `0` disables the optional component.
+- `TOUCH_GPIO` and `SERVO_GPIO` use **BCM GPIO numbers** (not physical header-pin positions); `0` disables the optional component. Valid config values are `0`–`27`; verify your board's pin map and wiring before enabling hardware.
 - Do not power a servo directly from a GPIO pin. Use a suitable external servo supply and a common ground.
 - Thermal monitoring requests a pause for heavy inference at the configured critical temperature and resumes after cooling.
 - No raw microphone audio is kept. Transcripts and answers are stored locally in `data/emo_cache.sqlite3`. Set `CACHE_ENABLED=false` to disable that text cache/log. Saved notes and to-dos live separately in `data/emo_features.sqlite3` and remain when the transcript cache is disabled; remove the corresponding database file to erase each store. Relative data/cache paths are resolved from the project directory, not the shell's current directory.

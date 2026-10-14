@@ -34,6 +34,7 @@ class ConfigValidationTests(unittest.TestCase):
             "LM_STUDIO_TIMEOUT_SECONDS": "0",
             "WAKE_TIMEOUT_SECONDS": "9999",
             "TOUCH_GPIO": "999",
+            "SERVO_GPIO": "28",
             "THERMAL_WARNING_C": "90",
             "THERMAL_LOCKOUT_C": "80",
             "THERMAL_RESUME_C": "85",
@@ -52,6 +53,7 @@ class ConfigValidationTests(unittest.TestCase):
         self.assertEqual(config.lm_studio_timeout_seconds, 35)
         self.assertEqual(config.wake_timeout_seconds, 20)
         self.assertEqual(config.touch_gpio, 0)
+        self.assertEqual(config.servo_gpio, 0)
         self.assertEqual(
             (config.thermal_warning_c, config.thermal_lockout_c, config.thermal_resume_c),
             (75.0, 82.0, 72.0),
@@ -194,6 +196,37 @@ class AudioDeviceSelectionTests(unittest.TestCase):
         self.assertEqual(device, 0)
         self.assertEqual(name, "USB Microphone")
         self.assertEqual(error, "")
+
+    def test_configured_device_name_selects_a_unique_input(self):
+        class FakeSD:
+            default = type("Default", (), {"device": (-1, -1)})()
+            @staticmethod
+            def query_devices(device=None):
+                devices = [
+                    {"name": "USB Headphones", "max_input_channels": 0},
+                    {"name": "USB Microphone Mono", "max_input_channels": 1},
+                ]
+                return devices if device is None else devices[device]
+        recorder = AudioRecorder(16000, 0.012, 8, 0.75, input_device="microphone mono")
+        device, name, error = recorder._resolve_input_device(FakeSD)
+        self.assertEqual(device, 1)
+        self.assertEqual(name, "USB Microphone Mono")
+        self.assertEqual(error, "")
+
+    def test_ambiguous_configured_device_name_is_reported(self):
+        class FakeSD:
+            default = type("Default", (), {"device": (-1, -1)})()
+            @staticmethod
+            def query_devices(device=None):
+                devices = [
+                    {"name": "USB Microphone Left", "max_input_channels": 1},
+                    {"name": "USB Microphone Right", "max_input_channels": 1},
+                ]
+                return devices if device is None else devices[device]
+        recorder = AudioRecorder(16000, 0.012, 8, 0.75, input_device="USB Microphone")
+        device, _name, error = recorder._resolve_input_device(FakeSD)
+        self.assertIsNone(device)
+        self.assertIn("ambiguous", error)
 
     def test_reports_missing_input_without_using_invalid_default(self):
         class FakeSD:

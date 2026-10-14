@@ -38,13 +38,27 @@ class AudioRecorder:
         inputs = [(index, item) for index, item in enumerate(devices)
                   if int(item.get("max_input_channels", 0) or 0) > 0]
         if self.input_device is not None:
+            if isinstance(self.input_device, str):
+                needle = self.input_device.strip().casefold()
+                matches = [
+                    (index, info) for index, info in inputs
+                    if needle and needle in str(info.get("name", "")).casefold()
+                ]
+                if len(matches) == 1:
+                    index, info = matches[0]
+                    return index, str(info.get("name", index)), ""
+                if len(matches) > 1:
+                    names = ", ".join(f"{info.get('name', index)!r} (index {index})" for index, info in matches)
+                    return None, "", f"Microphone name {self.input_device!r} is ambiguous; matches: {names}. Use its numeric index."
+                return None, "", f"No input device name contains {self.input_device!r}. Check sounddevice.query_devices()."
             try:
-                info = sd.query_devices(self.input_device)
+                index = int(self.input_device)
+                info = sd.query_devices(index)
             except Exception as exc:
                 return None, "", f"Configured microphone {self.input_device!r} is unavailable: {exc}"
             if int(info.get("max_input_channels", 0) or 0) < 1:
                 return None, "", f"Configured device {self.input_device!r} has no microphone input."
-            return self.input_device, str(info.get("name", self.input_device)), ""
+            return index, str(info.get("name", index)), ""
 
         try:
             defaults = sd.default.device

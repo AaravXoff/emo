@@ -235,4 +235,7 @@ class EMOAssistant:
     def close(self) -> None:
         self._closing = True
         self.features.close()
+        # Wait for an active response/timer announcement to finish before releasing resources.
+        with self._speech_lock:
+            pass
         self.cache.close()
