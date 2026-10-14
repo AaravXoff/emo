@@ -70,8 +70,18 @@ class SafeMath:
                 return out
             if isinstance(node, ast.UnaryOp) and type(node.op) in cls.UNARY: return cls.UNARY[type(node.op)](visit(node.operand))
             if isinstance(node, ast.Call) and isinstance(node.func,ast.Name) and node.func.id in cls.FUNCTIONS:
-                if node.keywords or len(node.args) not in (1,2): raise ValueError("Unsupported function arguments.")
-                return cls.FUNCTIONS[node.func.id](*(visit(x) for x in node.args))
+                if node.keywords or len(node.args) not in (1,2):
+                    raise ValueError("Unsupported function arguments.")
+                args = [visit(x) for x in node.args]
+                if node.func.id == "factorial":
+                    if len(args) != 1 or not isinstance(args[0], int) or not 0 <= args[0] <= 69:
+                        raise ValueError("factorial() supports whole numbers from 0 to 69 in calculator mode.")
+                result = cls.FUNCTIONS[node.func.id](*args)
+                if isinstance(result, complex) or not isinstance(result, (int, float)):
+                    raise ValueError("That function did not return a real number.")
+                if not math.isfinite(float(result)) or abs(result) > 1e100:
+                    raise ValueError("That result is outside the supported range.")
+                return result
             raise ValueError("I can calculate numeric expressions and supported math functions only.")
         return visit(tree)
 
@@ -476,7 +486,7 @@ class LocalFeatureHub:
             return "compliment",random.choice(["You are learning by building something real. Keep going!","Curiosity is a superpower. Keep asking good questions.","Small, steady improvements add up to impressive projects."])
 
         expr=re.sub(r"^(?:calculate|compute|solve|what is|what's)\s+","",original,flags=re.I)
-        if re.fullmatch(r"[0-9\s.+\-*/()%^]+",expr) and re.search(r"\d",expr):
+        if re.fullmatch(r"[0-9A-Za-z_\s.+\-*/(),%^]+",expr) and re.search(r"\d",expr):
             try:return "calculator",f"The answer is {self.fmt(SafeMath.evaluate(expr))}."
             except ZeroDivisionError:return "calculator","Division by zero is undefined."
             except (ValueError,SyntaxError,OverflowError,TypeError):return None

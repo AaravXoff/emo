@@ -416,6 +416,9 @@ class LocalFeatureHubTests(unittest.TestCase):
 
     def test_safe_calculator_and_conversion(self):
         self.assertEqual(self.hub.handle("calculate 12 * (3 + 4)")[1], "The answer is 84.")
+        self.assertEqual(self.hub.handle("calculate sqrt(81)")[1], "The answer is 9.")
+        self.assertEqual(self.hub.handle("calculate factorial(5)")[1], "The answer is 120.")
+        self.assertIsNone(self.hub.handle("calculate factorial(100000000)"))
         route, text = self.hub.handle("convert 5 km to miles")
         self.assertEqual(route, "length_conversion")
         self.assertIn("3.106", text)
