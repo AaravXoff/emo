@@ -18,8 +18,11 @@ if [[ ! -x .venv/bin/python ]]; then
   python3 -m venv .venv
 fi
 
-echo "Installing optional Faster-Whisper runtime..."
+echo "Installing EMO's core dependencies..."
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
+.venv/bin/python -m pip install -r requirements.txt
+
+echo "Installing optional Faster-Whisper runtime..."
 .venv/bin/python -m pip install -r requirements-faster-whisper.txt
 
 if [[ ! -f .env ]]; then
