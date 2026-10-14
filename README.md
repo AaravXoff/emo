@@ -55,6 +55,19 @@ The installer copies `.env.example` to `.env`. Never commit `.env`; it is ignore
 
 ## 2. Install optional AI components
 
+### English-only Whisper — Faster-Whisper tiny.en
+
+Your requested English-only setup uses Faster-Whisper with the small `tiny.en` model and CPU INT8 inference. On a 64-bit OS, install and pre-download its weights with:
+
+```bash
+cd ~/emo
+bash setup_english_whisper.sh
+```
+
+The script installs the optional dependency, downloads/verifies the model in `~/.cache/emo/whisper-en`, and updates only the three Whisper settings in `.env`. The assistant then pins transcription to English and uses beam size 1. It does not need to download the model again on each start.
+
+Faster-Whisper is an optional CPU backend, and model loading/transcription can still be slow or memory-intensive on a Raspberry Pi 3B+. For the lowest-memory option, use the native Whisper.cpp setup below instead.
+
 ### Whisper speech recognition — recommended: Whisper.cpp
 
 The native build is the recommended option for Raspberry Pi 3B+. It avoids installing a large Python/PyTorch wheel.

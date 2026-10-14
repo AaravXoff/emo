@@ -23,5 +23,6 @@ chmod 600 .env
 
 echo "[5/5] Core install complete."
 echo "Start with: source .venv/bin/activate && python emo.py"
-echo "Recommended Pi speech setup: bash setup_whisper_cpp.sh"
+echo "Lowest-memory speech setup: bash setup_whisper_cpp.sh"
+echo "Optional English-only Faster-Whisper: bash setup_english_whisper.sh"
 echo "Optional offline translations: pip install -r requirements-translation.txt"

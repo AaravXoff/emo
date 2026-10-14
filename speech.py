@@ -48,6 +48,8 @@ class WhisperRecognizer:
         self.cpp_threads = max(1, int(cpp_threads))
         self._model = None
         self._loaded_name = ""
+        self._faster_model = None
+        self._faster_loaded_name = ""
         self._lock = threading.RLock()
         self._resolved_backend: str | None = None
 
@@ -65,16 +67,27 @@ class WhisperRecognizer:
         except (ImportError, ValueError):
             return False
 
+    @staticmethod
+    def _faster_whisper_available() -> bool:
+        try:
+            return importlib.util.find_spec("faster_whisper") is not None
+        except (ImportError, ValueError):
+            return False
+
     def _select_backend(self) -> str:
         if self._resolved_backend:
             return self._resolved_backend
         if self.backend in {"cpp", "whisper.cpp", "whisper-cpp"}:
             self._resolved_backend = "cpp"
+        elif self.backend in {"faster-whisper", "faster_whisper", "faster"}:
+            self._resolved_backend = "faster-whisper"
         elif self.backend in {"python", "openai-whisper"}:
             self._resolved_backend = "python"
         elif self.backend == "auto":
             if self._cpp_available():
                 self._resolved_backend = "cpp"
+            elif self._faster_whisper_available():
+                self._resolved_backend = "faster-whisper"
             elif self._python_whisper_available():
                 self._resolved_backend = "python"
             else:
@@ -91,14 +104,18 @@ class WhisperRecognizer:
             if not self.cpp_model.is_file():
                 return False, f"Whisper.cpp model missing: {self.cpp_model}"
             return True, f"Whisper.cpp ready ({self.cpp_model.name}, {self.cpp_threads} CPU threads)"
+        if selected == "faster-whisper":
+            if not self._faster_whisper_available():
+                return False, "Faster-Whisper is not installed; run bash setup_english_whisper.sh"
+            return True, f"Faster-Whisper ready ({self.model_name}, CPU int8; English transcription)"
         if selected == "python":
             return True, "OpenAI Whisper Python package is installed; model loads on first use"
         if self.backend == "auto":
             return False, (
                 "No speech backend found. Recommended on Pi 3B+: run bash setup_whisper_cpp.sh. "
-                "See README.md for the optional Python Whisper backend."
+                "For English-only Faster-Whisper, run bash setup_english_whisper.sh."
             )
-        return False, f"Unsupported WHISPER_BACKEND={self.backend!r}; use auto, cpp, or python"
+        return False, f"Unsupported WHISPER_BACKEND={self.backend!r}; use auto, cpp, faster-whisper, or python"
 
     def preload(self) -> None:
         selected = self._select_backend()
@@ -106,6 +123,9 @@ class WhisperRecognizer:
             ok, detail = self.dependency_check()
             if not ok:
                 raise RuntimeError(detail)
+            return
+        if selected == "faster-whisper":
+            self._get_faster_model(self.model_name)
             return
         if selected == "python":
             self._get_model(self.model_name)
@@ -133,6 +153,38 @@ class WhisperRecognizer:
             if self.status is not None:
                 self.status.set_boot_step("Whisper", "ok", f"{name} model loaded in CPU mode")
             return self._model
+
+    def _get_faster_model(self, name: str):
+        """Load Faster-Whisper on CPU with INT8; model weights download if absent."""
+        with self._lock:
+            if self._faster_model is not None and self._faster_loaded_name == name:
+                return self._faster_model
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Faster-Whisper is not installed. Run bash setup_english_whisper.sh "
+                    "to install it and download the tiny.en model."
+                ) from exc
+            self.download_root.mkdir(parents=True, exist_ok=True)
+            if self.status is not None:
+                self.status.set_stage(
+                    "Loading English Whisper",
+                    f"Loading Faster-Whisper {name}; the first use downloads weights if needed",
+                )
+                self.status.set_boot_step("Whisper", "running", f"Loading Faster-Whisper {name}")
+            self._faster_model = None
+            self._faster_loaded_name = ""
+            self._faster_model = WhisperModel(
+                name,
+                device="cpu",
+                compute_type="int8",
+                download_root=str(self.download_root),
+            )
+            self._faster_loaded_name = name
+            if self.status is not None:
+                self.status.set_boot_step("Whisper", "ok", f"Faster-Whisper {name} ready (CPU int8)")
+            return self._faster_model
 
     def _run_cpp(self, audio_path: str | Path, translate_to_english: bool = False,
                  language: str = "auto") -> tuple[str, str]:
@@ -193,6 +245,23 @@ class WhisperRecognizer:
         selected = self._select_backend()
         if selected == "cpp":
             raw_text, language = self._run_cpp(audio_path, translate_to_english=False, language="auto")
+        elif selected == "faster-whisper":
+            model = self._get_faster_model(self.model_name)
+            try:
+                segments, _info = model.transcribe(
+                    str(audio_path),
+                    task="transcribe",
+                    language="en",
+                    beam_size=1,
+                    condition_on_previous_text=False,
+                )
+            except TypeError:
+                segments, _info = model.transcribe(
+                    str(audio_path), language="en", beam_size=1
+                )
+            raw_text = "".join(segment.text for segment in segments).strip()
+            # The tiny.en model and fixed language argument intentionally make this English-only.
+            language = "en"
         elif selected == "python":
             model = self._get_model(self.model_name)
             try:

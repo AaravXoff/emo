@@ -1,0 +1,2 @@
+# Optional English-only ASR backend; use setup_english_whisper.sh to install and pre-download tiny.en.
+faster-whisper>=1.1.0,<2.0.0

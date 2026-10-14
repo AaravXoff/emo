@@ -4,6 +4,8 @@ import unittest
 import threading
 import os
 import io
+import sys
+import types
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -130,18 +132,24 @@ class CacheTests(unittest.TestCase):
 
 
 class FaceAnimationAssetTests(unittest.TestCase):
-    def test_face_has_smooth_motion_and_reduced_motion_support(self):
+    def test_face_uses_the_supplied_pygame_eye_motion_not_pupils_or_glow(self):
         face_html = (Path(__file__).resolve().parents[1] / "face.html").read_text(encoding="utf-8")
-        self.assertIn("cubic-bezier(.22,1,.36,1)", face_html)
-        self.assertIn("@keyframes ambient-glow", face_html)
-        self.assertIn("@keyframes idle-float", face_html)
-        self.assertIn("@keyframes dance-eye", face_html)
-        self.assertIn(".eye::before", face_html)
-        self.assertIn("function gazeFor(state,index)", face_html)
-        self.assertIn("@keyframes glint-sparkle", face_html)
-        self.assertIn("scheduleBlink()", face_html)
+        self.assertIn("eyeWidthDefault=90, eyeHeightDefault=90, spaceDefault=14", face_html)
+        self.assertIn("eyeLxNext", face_html)
+        self.assertIn("eyeLh=(eyeLh+eyeHeightDefault)/2", face_html.replace(" ", ""))
+        self.assertIn("Math.sin(now*0.01)*4*scaleY", face_html.replace(" ", ""))
+        self.assertIn("randInt(2000,5000)", face_html.replace(" ", ""))
+        self.assertIn("randInt(3000,7000)", face_html.replace(" ", ""))
+        self.assertIn("randInt(10,40)", face_html.replace(" ", ""))
+        self.assertIn("border-radius:24.4%", face_html)
+        self.assertIn("#face[data-state=listening]{--eye:#ffd200}", face_html)
+        self.assertNotIn(".eye::before", face_html)
+        self.assertNotIn(".eye-glint", face_html)
+        self.assertNotIn("@keyframes idle-float", face_html)
+        self.assertNotIn("@keyframes glint-sparkle", face_html)
         self.assertIn("prefers-reduced-motion:reduce", face_html.replace(" ", ""))
         self.assertIn("window.matchMedia('(prefers-reduced-motion: reduce)')", face_html)
+
 
 class FaceApiTests(unittest.TestCase):
     def test_server_can_stop_and_restart_cleanly(self):
@@ -174,6 +182,64 @@ class FaceApiTests(unittest.TestCase):
         payload = response.get_json()
         self.assertFalse(payload["boot_complete"])
         self.assertIn("Whisper", payload["boot_steps"])
+
+
+class FasterWhisperTests(unittest.TestCase):
+    def test_faster_whisper_forces_english_and_uses_cpu_int8(self):
+        calls = {}
+
+        class FakeSegment:
+            def __init__(self, text):
+                self.text = text
+
+        class FakeModel:
+            def __init__(self, model_name, **kwargs):
+                calls["model_name"] = model_name
+                calls["init"] = kwargs
+
+            def transcribe(self, audio_path, **kwargs):
+                calls["audio_path"] = audio_path
+                calls["transcribe"] = kwargs
+                return iter([FakeSegment(" Hello"), FakeSegment(" EMO")]), type(
+                    "Info", (), {"language": "es"}
+                )()
+
+        fake_module = types.ModuleType("faster_whisper")
+        fake_module.WhisperModel = FakeModel
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            audio = root / "sample.wav"
+            audio.touch()
+            recognizer = WhisperRecognizer(
+                model_name="tiny.en",
+                translation_model_name="tiny.en",
+                download_root=root / "models",
+                translator=None,
+                backend="faster-whisper",
+            )
+            with patch.dict(sys.modules, {"faster_whisper": fake_module}):
+                result = recognizer.transcribe(audio)
+
+        self.assertEqual(result.text, "Hello EMO")
+        self.assertEqual(result.english_text, "Hello EMO")
+        self.assertEqual(result.language, "en")
+        self.assertEqual(result.translation_method, "already-english")
+        self.assertEqual(calls["model_name"], "tiny.en")
+        self.assertEqual(calls["init"]["device"], "cpu")
+        self.assertEqual(calls["init"]["compute_type"], "int8")
+        self.assertEqual(calls["transcribe"]["language"], "en")
+        self.assertEqual(calls["transcribe"]["task"], "transcribe")
+        self.assertEqual(calls["transcribe"]["beam_size"], 1)
+
+    def test_english_whisper_setup_files_select_tiny_en(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "setup_english_whisper.sh").read_text(encoding="utf-8")
+        downloader = (root / "scripts" / "download_whisper_en.py").read_text(encoding="utf-8")
+        requirements = (root / "requirements-faster-whisper.txt").read_text(encoding="utf-8")
+        self.assertIn("WHISPER_BACKEND=faster-whisper", script)
+        self.assertIn("WHISPER_MODEL=tiny.en", script)
+        self.assertIn('choices=("tiny.en",)', downloader)
+        self.assertIn("faster-whisper", requirements)
 
 
 class WhisperCppTests(unittest.TestCase):
