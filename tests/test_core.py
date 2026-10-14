@@ -11,6 +11,7 @@ from state import RobotStatus
 from speech import WhisperRecognizer
 from feature_hub import FEATURES, LocalFeatureHub
 from audio_io import AudioRecorder
+from assistant import EMOAssistant
 from unittest.mock import patch
 import json
 
@@ -33,6 +34,11 @@ class IntentTests(unittest.TestCase):
 
     def test_unknown_goes_to_llm(self):
         self.assertEqual(self.router.match("Explain black holes").name, "llm")
+
+    def test_greeting_substrings_do_not_match_inside_other_words(self):
+        self.assertEqual(self.router.match("Which country has the largest rainforest?").name, "llm")
+        self.assertEqual(self.router.match("This is a history question").name, "llm")
+        self.assertEqual(self.router.match("Hi EMO").name, "greeting")
 
     def test_normalization(self):
         self.assertEqual(normalize(" Hello, EMO!!! "), "hello emo")
@@ -145,6 +151,72 @@ class AudioDeviceSelectionTests(unittest.TestCase):
         device, _name, error = recorder._resolve_input_device(FakeSD)
         self.assertIsNone(device)
         self.assertIn("No microphone input device", error)
+
+
+class AssistantSafetyTests(unittest.TestCase):
+    class FakeHardware:
+        def set_expression(self, expression):
+            pass
+
+    class FakeSpeech:
+        def speak(self, text, language="en"):
+            self.last_text = text
+            return True
+
+    class FakeTranslator:
+        @staticmethod
+        def translate(text, source, target):
+            return None
+
+    class FakeLLM:
+        @staticmethod
+        def complete(*args, **kwargs):
+            return "fallback answer"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.config = type("Config", (), {
+            "data_dir": self.root / "data",
+            "cache_db": self.root / "cache.sqlite3",
+            "cache_enabled": True,
+            "time_zone": "Asia/Kolkata",
+            "cache_ttl_seconds": 3600,
+            "weather_cache_ttl_seconds": 300,
+        })()
+        self.status = RobotStatus()
+        self.face = HtmlFace(status=self.status)
+        self.speech = self.FakeSpeech()
+        self.assistant = EMOAssistant(
+            self.config, self.status, self.face, self.FakeHardware(), None,
+            self.FakeTranslator(), self.FakeLLM(), self.speech,
+        )
+
+    def tearDown(self):
+        self.assistant.close()
+        self.temp.cleanup()
+
+    def test_old_llm_cache_cannot_shadow_local_calculator(self):
+        self.assistant.cache.put(
+            "calculate 12 * (3 + 4)", "en", "llm", "incorrect cached answer", 3600
+        )
+        response = self.assistant.process(
+            "calculate 12 * (3 + 4)", "en", "calculate 12 * (3 + 4)"
+        )
+        self.assertEqual(response, "The answer is 84.")
+
+    def test_generated_password_is_not_saved_in_history_or_turn_log(self):
+        response = self.assistant.process("generate password", "en", "generate password")
+        self.assertIn("Generated password:", response)
+        secret = response.split("Generated password:", 1)[1].strip()
+        self.assertTrue(secret)
+        history_text = " ".join(item["content"] for item in self.assistant._history)
+        logged = self.assistant.cache.connection.execute(
+            "SELECT response_text FROM turns ORDER BY id DESC LIMIT 1"
+        ).fetchone()["response_text"]
+        self.assertNotIn(secret, history_text)
+        self.assertNotIn(secret, logged)
+        self.assertEqual(logged, "[redacted: generated password]")
 
 
 class LocalFeatureHubTests(unittest.TestCase):

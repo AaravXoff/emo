@@ -35,12 +35,22 @@ class IntentRouter:
         ]
 
     @staticmethod
-    def _best_match(text: str, phrases: list[str], threshold: float = 0.76) -> float:
+    def _contains_phrase(text: str, phrase: str) -> bool:
+        # Match whole words/phrases only. Substring checks make "which" match "hi".
+        pattern = r"(?<!\\w)" + re.escape(phrase).replace(r"\\ ", r"\\s+") + r"(?!\\w)"
+        return re.search(pattern, text, flags=re.UNICODE) is not None
+
+    @classmethod
+    def _best_match(cls, text: str, phrases: list[str], threshold: float = 0.76) -> float:
+        text = normalize(text)
         if not text:
             return 0.0
         best = 0.0
-        for phrase in phrases:
-            if phrase in text or text in phrase:
+        for item in phrases:
+            phrase = normalize(item)
+            if not phrase:
+                continue
+            if cls._contains_phrase(text, phrase):
                 return 1.0
             best = max(best, SequenceMatcher(None, text, phrase).ratio())
         return best if best >= threshold else 0.0

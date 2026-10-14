@@ -1,6 +1,7 @@
 """Intent router, direct actions, local LLM fallback, TTS and context caching."""
 from __future__ import annotations
 import logging
+import threading
 import time
 
 from audio_io import SoundEffects
@@ -29,6 +30,8 @@ class EMOAssistant:
         self.weather = WeatherService()
         self.effects = SoundEffects()
         self._history: list[dict] = []
+        self._speech_lock = threading.RLock()
+        self._closing = False
         self.features = LocalFeatureHub(config.data_dir, status, face, hardware, notify=self._timer_notify)
 
     def _localized(self, english_text: str, language: str) -> str:
@@ -61,15 +64,19 @@ class EMOAssistant:
         return self._localized("Hey! I'm EMO. What can I help you with?", language)
 
     def _speak(self, text: str, language: str, expression: str = "talking") -> None:
-        self.face.set_state(expression)
-        self.hardware.set_expression(expression)
-        self.face.set_talking(True)
-        try:
-            self.speech.speak(text, language)
-        finally:
-            self.face.set_talking(False)
-            self.face.set_state("idle", duration=0.8)
-            self.hardware.set_expression("idle")
+        # Timer callbacks may fire while a regular response is being spoken; serialize audio.
+        with self._speech_lock:
+            if self._closing:
+                return
+            self.face.set_state(expression)
+            self.hardware.set_expression(expression)
+            self.face.set_talking(True)
+            try:
+                self.speech.speak(text, language)
+            finally:
+                self.face.set_talking(False)
+                self.face.set_state("idle", duration=0.8)
+                self.hardware.set_expression("idle")
 
     def process(self, original_text: str, language: str, english_text: str,
                 translation_method: str = "unknown") -> str:
@@ -79,6 +86,9 @@ class EMOAssistant:
         if not original_text:
             return ""
         intent = self.router.match(english_text)
+        # Run newly added local tools before consulting old cache entries: an old LLM
+        # response for an identical prompt must not shadow a deterministic local command.
+        feature_result = self.features.handle(english_text) if intent.name == "llm" else None
         started = time.monotonic()
         cache_hit = False
         cached = self.cache.get(original_text, language)
@@ -91,7 +101,7 @@ class EMOAssistant:
         }
 
         # Do not serve a stale clock answer. Weather is cached only for the short configured TTL.
-        if cached and cached["route"] not in {"time", "animal_sound", "sing"}:
+        if feature_result is None and cached and cached["route"] not in {"time", "animal_sound", "sing"}:
             response = cached["response_text"]
             route = cached["route"]
             cache_hit = True
@@ -132,7 +142,7 @@ class EMOAssistant:
                     response = self._localized(ORIGINAL_SONG, language)
                     self.face.set_state("dance", duration=3.0)
                 else:
-                    feature = self.features.handle(english_text)
+                    feature = feature_result
                     if feature:
                         route, feature_response = feature
                         response = feature_response if language == "en" else self._localized(feature_response, language)
@@ -166,10 +176,17 @@ class EMOAssistant:
                 with self.status.lock:
                     self.status.last_error = str(exc)[:240]
 
-        self._history.extend([
-            {"role": "user", "content": original_text[:1200]},
-            {"role": "assistant", "content": response[:1200]},
-        ])
+        if route == "password_generator":
+            # Never retain generated credentials in model context or turn history.
+            self._history.extend([
+                {"role": "user", "content": original_text[:1200]},
+                {"role": "assistant", "content": "[generated password omitted]"},
+            ])
+        else:
+            self._history.extend([
+                {"role": "user", "content": original_text[:1200]},
+                {"role": "assistant", "content": response[:1200]},
+            ])
         self._history = self._history[-8:]
         if not cache_hit:
             if route in {"greeting", "llm"}:
@@ -179,8 +196,10 @@ class EMOAssistant:
 
         with self.status.lock:
             self.status.last_action = route
+        # The credential is spoken back once but never written to the persistent transcript.
+        logged_response = "[redacted: generated password]" if route == "password_generator" else response
         self.cache.log_turn(
-            original_text, language, english_text, route, response, cache_hit=cache_hit,
+            original_text, language, english_text, route, logged_response, cache_hit=cache_hit,
             process={**process_data, "elapsed_seconds": round(time.monotonic() - started, 3)},
         )
         expression = {"greeting": "happy", "sing": "dance", "animal_sound": "excited"}.get(route, "talking")
@@ -195,5 +214,6 @@ class EMOAssistant:
             log.exception("Timer notification failed")
 
     def close(self) -> None:
+        self._closing = True
         self.features.close()
         self.cache.close()
