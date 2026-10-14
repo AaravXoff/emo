@@ -37,7 +37,7 @@ class IntentRouter:
     @staticmethod
     def _contains_phrase(text: str, phrase: str) -> bool:
         # Match whole words/phrases only. Substring checks make "which" match "hi".
-        pattern = r"(?<!\\w)" + re.escape(phrase).replace(r"\\ ", r"\\s+") + r"(?!\\w)"
+        pattern = r"(?<!\w)" + re.escape(phrase).replace(r"\ ", r"\s+") + r"(?!\w)"
         return re.search(pattern, text, flags=re.UNICODE) is not None
 
     @classmethod
