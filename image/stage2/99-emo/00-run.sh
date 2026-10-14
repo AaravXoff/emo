@@ -22,6 +22,15 @@ install -D -m 0755 files/whisper/whisper-cli \
 install -D -m 0644 files/whisper/ggml-tiny.bin \
   "${ROOTFS_DIR}/opt/whisper.cpp/models/ggml-tiny.bin"
 
+shopt -s nullglob
+whisper_libraries=(files/whisper/lib*.so*)
+if ((${#whisper_libraries[@]} == 0)); then
+  echo "Whisper.cpp runtime shared libraries are missing from the image stage." >&2
+  exit 1
+fi
+cp -a "${whisper_libraries[@]}" "${ROOTFS_DIR}/opt/whisper.cpp/build/bin/"
+shopt -u nullglob
+
 # Create a fresh non-secret local config; never copy a developer's .env into an image.
 install -m 0640 "${ROOTFS_DIR}/opt/emo/.env.example" "${ROOTFS_DIR}/opt/emo/.env"
 sed -i \

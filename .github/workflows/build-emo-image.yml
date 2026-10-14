@@ -71,6 +71,8 @@ jobs:
           cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper.cpp/build-arm64" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/aarch64-toolchain.cmake" \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
             -DGGML_NATIVE=OFF \
             -DGGML_OPENMP=OFF \
             -DGGML_BACKEND_DL=OFF \
@@ -87,7 +89,7 @@ jobs:
           # whisper-cli prints its help but exits with status 1 for --help.
           # Validate the output instead of treating that expected exit as a build failure.
           qemu-aarch64 -L /usr/aarch64-linux-gnu "$WHISPER_BIN" --help > "$RUNNER_TEMP/whisper-help.txt" 2>&1 || true
-          grep -q 'usage:' "$RUNNER_TEMP/whisper-help.txt"
+          grep -qi 'usage:' "$RUNNER_TEMP/whisper-help.txt"
           for flag in --output-json-full --output-file --no-prints --translate --threads; do
             grep -q -- "$flag" "$RUNNER_TEMP/whisper-help.txt"
           done
@@ -98,6 +100,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/whisper-stage"
           install -m 0755 "$WHISPER_BIN" "$RUNNER_TEMP/whisper-stage/whisper-cli"
           install -m 0644 "$RUNNER_TEMP/whisper.cpp/models/ggml-tiny.bin" "$RUNNER_TEMP/whisper-stage/ggml-tiny.bin"
+          # Package runtime libraries alongside the binary and use a relocatable RPATH.
+          test -n "$(find "$RUNNER_TEMP/whisper.cpp/build-arm64/bin" -maxdepth 1 -type f -name 'lib*.so*' -print -quit)"
+          cp -a "$RUNNER_TEMP/whisper.cpp/build-arm64/bin"/lib*.so* "$RUNNER_TEMP/whisper-stage/"
+          readelf -d "$RUNNER_TEMP/whisper-stage/whisper-cli" | grep -F '$ORIGIN'
+          qemu-aarch64 -L /usr/aarch64-linux-gnu "$RUNNER_TEMP/whisper-stage/whisper-cli" --help > "$RUNNER_TEMP/staged-whisper-help.txt" 2>&1 || true
+          grep -qi 'usage:' "$RUNNER_TEMP/staged-whisper-help.txt"
 
       - name: Prepare official pi-gen and EMO image stage
         shell: bash
@@ -134,6 +142,7 @@ jobs:
             pi-gen/stage2/99-emo/files/whisper/whisper-cli
           install -m 0644 "$RUNNER_TEMP/whisper-stage/ggml-tiny.bin" \
             pi-gen/stage2/99-emo/files/whisper/ggml-tiny.bin
+          cp -a "$RUNNER_TEMP/whisper-stage"/lib*.so* pi-gen/stage2/99-emo/files/whisper/
 
           cat > pi-gen/config <<'EOF'
           IMG_NAME='emo-os'

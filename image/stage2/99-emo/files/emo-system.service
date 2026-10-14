@@ -11,6 +11,7 @@ SupplementaryGroups=audio
 WorkingDirectory=/opt/emo
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/var/lib/emo
+Environment=LD_LIBRARY_PATH=/opt/whisper.cpp/build/bin
 EnvironmentFile=/opt/emo/.env
 ExecStart=/opt/emo/.venv/bin/python /opt/emo/emo.py
 Restart=on-failure
