@@ -84,7 +84,10 @@ jobs:
           readelf -h "$WHISPER_BIN" | grep -q 'AArch64'
 
           # Run the ARM64 executable under QEMU to verify CLI flags expected by speech.py.
-          qemu-aarch64 -L /usr/aarch64-linux-gnu "$WHISPER_BIN" --help > "$RUNNER_TEMP/whisper-help.txt"
+          # whisper-cli prints its help but exits with status 1 for --help.
+          # Validate the output instead of treating that expected exit as a build failure.
+          qemu-aarch64 -L /usr/aarch64-linux-gnu "$WHISPER_BIN" --help > "$RUNNER_TEMP/whisper-help.txt" 2>&1 || true
+          grep -q 'usage:' "$RUNNER_TEMP/whisper-help.txt"
           for flag in --output-json-full --output-file --no-prints --translate --threads; do
             grep -q -- "$flag" "$RUNNER_TEMP/whisper-help.txt"
           done
