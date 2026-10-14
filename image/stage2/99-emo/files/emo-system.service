@@ -1,0 +1,28 @@
+[Unit]
+Description=EMO local AI robot assistant
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=emo
+Group=emo
+SupplementaryGroups=audio
+WorkingDirectory=/opt/emo
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/var/lib/emo
+EnvironmentFile=/opt/emo/.env
+ExecStart=/opt/emo/.venv/bin/python /opt/emo/emo.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/emo /tmp
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

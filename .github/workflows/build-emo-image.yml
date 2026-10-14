@@ -1,0 +1,219 @@
+name: Build EMO OS image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "image/**"
+      - ".github/workflows/build-emo-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emo-os-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build 64-bit Raspberry Pi OS Lite + EMO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      PI_GEN_COMMIT: d346cd53562b3c6b4f94c9155175f814258c456d
+      WHISPER_CPP_TAG: v1.9.4
+
+    steps:
+      - name: Check out EMO
+        uses: actions/checkout@v4
+
+      - name: Free temporary disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/powershell || true
+          df -h /
+
+      - name: Install cross-build and audio test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user \
+            python3-full python3-venv \
+            libportaudio2 portaudio19-dev libsndfile1 \
+            git curl wget ca-certificates xz-utils file
+
+      - name: Test EMO Python code before image build
+        run: |
+          python3 -m venv /tmp/emo-image-check
+          /tmp/emo-image-check/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+          /tmp/emo-image-check/bin/python -m compileall -q .
+          /tmp/emo-image-check/bin/python -m unittest discover -s tests -v
+
+      - name: Cross-compile Whisper.cpp for ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WHISPER_CPP_TAG" \
+            https://github.com/ggml-org/whisper.cpp.git "$RUNNER_TEMP/whisper.cpp"
+
+          cat > "$RUNNER_TEMP/aarch64-toolchain.cmake" <<'EOF'
+          set(CMAKE_SYSTEM_NAME Linux)
+          set(CMAKE_SYSTEM_PROCESSOR aarch64)
+          set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+          set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+          set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          EOF
+
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper.cpp/build-arm64" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/aarch64-toolchain.cmake" \
+            -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_BACKEND_DL=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=ON \
+            -DWHISPER_BUILD_SERVER=OFF
+
+          cmake --build "$RUNNER_TEMP/whisper.cpp/build-arm64" --target whisper-cli --parallel 2
+          WHISPER_BIN="$(find "$RUNNER_TEMP/whisper.cpp/build-arm64" -type f -name whisper-cli -perm -u+x -print -quit)"
+          test -n "$WHISPER_BIN"
+          readelf -h "$WHISPER_BIN" | grep -q 'AArch64'
+
+          # Run the ARM64 executable under QEMU to verify CLI flags expected by speech.py.
+          qemu-aarch64 -L /usr/aarch64-linux-gnu "$WHISPER_BIN" --help > "$RUNNER_TEMP/whisper-help.txt"
+          for flag in --output-json-full --output-file --no-prints --translate --threads; do
+            grep -q -- "$flag" "$RUNNER_TEMP/whisper-help.txt"
+          done
+
+          bash "$RUNNER_TEMP/whisper.cpp/models/download-ggml-model.sh" tiny
+          test -s "$RUNNER_TEMP/whisper.cpp/models/ggml-tiny.bin"
+
+          mkdir -p "$RUNNER_TEMP/whisper-stage"
+          install -m 0755 "$WHISPER_BIN" "$RUNNER_TEMP/whisper-stage/whisper-cli"
+          install -m 0644 "$RUNNER_TEMP/whisper.cpp/models/ggml-tiny.bin" "$RUNNER_TEMP/whisper-stage/ggml-tiny.bin"
+
+      - name: Prepare official pi-gen and EMO image stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/RPi-Distro/pi-gen.git pi-gen
+          git -C pi-gen checkout "$PI_GEN_COMMIT"
+
+          mapfile -t packages < <(awk -F: 'NF {print ($2 != "" ? $2 : $1)}' pi-gen/depends | sort -u)
+          sudo apt-get install -y "${packages[@]}"
+          if command -v update-binfmts >/dev/null 2>&1; then
+            sudo update-binfmts --enable 2>/dev/null || true
+          fi
+
+          cp -a image/stage2/99-emo pi-gen/stage2/
+          mkdir -p pi-gen/stage2/99-emo/files/emo pi-gen/stage2/99-emo/files/whisper
+
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.venv/' \
+            --exclude='.env' \
+            --exclude='data/' \
+            --exclude='*.sqlite3*' \
+            --exclude='*.wav' \
+            --exclude='*.swp' \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            --exclude='.github/' \
+            --exclude='image/' \
+            --exclude='tests/' \
+            ./ pi-gen/stage2/99-emo/files/emo/
+
+          install -m 0755 "$RUNNER_TEMP/whisper-stage/whisper-cli" \
+            pi-gen/stage2/99-emo/files/whisper/whisper-cli
+          install -m 0644 "$RUNNER_TEMP/whisper-stage/ggml-tiny.bin" \
+            pi-gen/stage2/99-emo/files/whisper/ggml-tiny.bin
+
+          cat > pi-gen/config <<'EOF'
+          IMG_NAME='emo-os'
+          PI_GEN_RELEASE='EMO OS community image'
+          RELEASE='trixie'
+          DEPLOY_COMPRESSION='xz'
+          COMPRESSION_LEVEL='5'
+          STAGE_LIST='stage0 stage1 stage2'
+          TARGET_HOSTNAME='emo-robot'
+          TIMEZONE_DEFAULT='Asia/Kolkata'
+          LOCALE_DEFAULT='en_GB.UTF-8'
+          KEYBOARD_KEYMAP='us'
+          KEYBOARD_LAYOUT='English (US)'
+          WPA_COUNTRY='IN'
+          ENABLE_SSH=1
+          FIRST_USER_NAME='pi'
+          DISABLE_FIRST_BOOT_USER_RENAME=0
+          EOF
+
+      - name: Build flashable Raspberry Pi image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pi-gen
+          sudo CLEAN=1 ./build.sh
+          sudo chown -R "$(id -un):$(id -gn)" deploy
+
+      - name: Validate image and calculate checksum
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$(find pi-gen/deploy -maxdepth 1 -type f -name '*.img.xz' -print -quit)"
+          if [[ -z "$image" ]]; then
+            echo "pi-gen completed without producing a .img.xz file" >&2
+            find pi-gen/deploy -maxdepth 1 -type f -ls || true
+            exit 1
+          fi
+          xz -t "$image"
+          sha256sum "$image" > "$image.sha256"
+          echo "path=$image" >> "$GITHUB_OUTPUT"
+          echo "Built image: $image"
+          ls -lh "$image" "$image.sha256"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emo-os-pi3bplus-arm64
+          path: |
+            ${{ steps.image.outputs.path }}
+            ${{ steps.image.outputs.path }}.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Publish downloadable prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ steps.image.outputs.path }}"
+          tag="emo-os-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## EMO OS - Raspberry Pi 3B+ / ARM64
+
+          This is a community-built Raspberry Pi OS Lite image with EMO preinstalled,
+          its system service enabled, and the ARM64 Whisper.cpp tiny multilingual model included.
+
+          First boot: use Raspberry Pi Imager OS customisation to set up your own username,
+          password, Wi-Fi and SSH settings. No private .env file or default account password
+          is embedded in this image.
+
+          The image is headless (no desktop environment). EMO's face API binds to localhost;
+          open it on the Pi at http://127.0.0.1:8765/, or use an SSH tunnel from another
+          computer. Edit /opt/emo/.env with sudo to configure audio input and your LM Studio endpoint.
+
+          Flashing erases the selected SD card. Verify the published SHA-256 checksum before use.
+          This image is build-tested; real microphone, speaker and device operation still depend
+          on your connected hardware and must be checked on the Pi.
+          EOF
+          gh release create "$tag" "$image" "$image.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "EMO OS image ${GITHUB_RUN_ID}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --prerelease
