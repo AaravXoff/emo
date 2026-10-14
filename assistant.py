@@ -66,7 +66,8 @@ class EMOAssistant:
             return greetings[language]
         return self._localized("Hey! I'm EMO. What can I help you with?", language)
 
-    def _speak(self, text: str, language: str, expression: str = "talking") -> None:
+    def _speak(self, text: str, language: str, expression: str = "talking",
+               sensitive: bool = False) -> None:
         # Timer callbacks may fire while a regular response is being spoken; serialize audio.
         with self._speech_lock:
             if self._closing:
@@ -75,7 +76,7 @@ class EMOAssistant:
             self.hardware.set_expression(expression)
             self.face.set_talking(True)
             try:
-                self.speech.speak(text, language)
+                self.speech.speak(text, language, sensitive=sensitive)
             finally:
                 self.face.set_talking(False)
                 self.face.set_state("idle", duration=0.8)
@@ -228,7 +229,10 @@ class EMOAssistant:
             expression = route[len("face_"):]
         else:
             expression = {"greeting": "happy", "sing": "dance", "animal_sound": "excited"}.get(route, "talking")
-        self._speak(response, language, expression=expression)
+        self._speak(
+            response, language, expression=expression,
+            sensitive=(route == "password_generator"),
+        )
         self.status.set_stage("Listening", "Say a wake phrase followed by a request")
         return response
 

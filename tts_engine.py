@@ -52,7 +52,7 @@ class SpeechEngine:
                 return available, "Chatterbox unavailable; espeak fallback available" if available else "No usable TTS engine installed"
         return bool(shutil.which("espeak-ng") or shutil.which("espeak")), "Using espeak fallback"
 
-    def speak(self, text: str, language: str = "en") -> bool:
+    def speak(self, text: str, language: str = "en", *, sensitive: bool = False) -> bool:
         text = " ".join((text or "").split())
         if not text:
             return False
@@ -69,7 +69,10 @@ class SpeechEngine:
             self.last_engine = "espeak-ng"
             return True
         self.last_engine = "console"
-        print(f"EMO: {text}")
+        if sensitive:
+            print("EMO: [sensitive response omitted because no voice engine is available]")
+        else:
+            print(f"EMO: {text}")
         return False
 
     def _speak_chatterbox(self, text: str, language: str) -> bool:

@@ -3,6 +3,8 @@ import tempfile
 import unittest
 import threading
 import os
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from intent_router import IntentRouter
@@ -271,9 +273,11 @@ class AssistantSafetyTests(unittest.TestCase):
             self.last_text = ""
             self.face = None
             self.expression_during_speech = ""
+            self.last_sensitive = False
 
-        def speak(self, text, language="en"):
+        def speak(self, text, language="en", *, sensitive=False):
             self.last_text = text
+            self.last_sensitive = sensitive
             if self.face is not None:
                 self.expression_during_speech = self.face.get_state()
             return True
@@ -344,6 +348,7 @@ class AssistantSafetyTests(unittest.TestCase):
         self.assertNotIn(secret, history_text)
         self.assertNotIn(secret, logged)
         self.assertEqual(logged, "[redacted: generated password]")
+        self.assertTrue(self.speech.last_sensitive)
 
     def test_password_is_not_sent_to_translation_model(self):
         self.assistant.process("generate password", "hi", "generate password")
@@ -384,6 +389,15 @@ class SpeechOutputTests(unittest.TestCase):
     class Result:
         def __init__(self, returncode):
             self.returncode = returncode
+
+    def test_sensitive_console_fallback_never_prints_secret(self):
+        engine = SpeechEngine("espeak")
+        secret = "DoNotPrintThisGeneratedSecret"
+        output = io.StringIO()
+        with patch("tts_engine.shutil.which", return_value=None), redirect_stdout(output):
+            self.assertFalse(engine.speak(secret, "en", sensitive=True))
+        self.assertNotIn(secret, output.getvalue())
+        self.assertIn("sensitive response omitted", output.getvalue())
 
     def test_espeak_retries_english_when_requested_voice_fails(self):
         engine = SpeechEngine("espeak")
