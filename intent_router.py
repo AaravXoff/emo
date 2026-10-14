@@ -22,12 +22,16 @@ class IntentRouter:
         ]
         self.time_phrases = [
             "what time is it", "what is the time", "tell me the time",
-            "current time", "time now", "what is today's time", "clock",
+            "current time", "time now", "what is today's time", "what is the current time",
+            "do you know the time", "give me the time", "tell me what time it is",
+            "can you tell me the time",
         ]
         self.weather_phrases = [
             "whats the weather", "what is the weather", "weather forecast",
             "current weather", "weather today", "will it rain", "is it raining",
-            "temperature outside", "how is the weather",
+            "temperature outside", "how is the weather", "weather in", "weather near",
+            "forecast in", "forecast for", "rain in", "temperature in",
+            "what is the temperature", "whats the temperature", "temperature today", "temperature now",
         ]
         self.song_phrases = [
             "sing a song", "sing for me", "can you sing", "sing something",
@@ -65,33 +69,38 @@ class IntentRouter:
             "cat": r"\b(cat|kitten)\b", "dog": r"\b(dog|puppy)\b",
             "wolf": r"\b(wolf|wolves)\b", "fox": r"\b(fox|foxes)\b",
         }
-        says = bool(re.search(r"\b(say|says|sound|sounds|noise|make the sound|what does)\b", t))
+        says = bool(re.search(r"\b(say|says|sound|sounds|noise|voice|bark|barks|meow|howl)\b", t))
         if says:
             for animal, pattern in animals.items():
                 if re.search(pattern, t):
                     return Intent("animal_sound", animal)
         for animal, pattern in animals.items():
-            if re.search(pattern, t) and re.search(r"\b(sound|noise|voice|say|says)\b", t):
+            if re.search(pattern, t) and re.search(r"\b(sound|noise|voice|say|says|bark|barks|meow|howl)\b", t):
                 return Intent("animal_sound", animal, .94)
 
         score = self._best_match(t, self.song_phrases)
         if score:
             return Intent("sing", confidence=score)
 
-        if re.search(r"\b(weather|forecast|rain|raining|mausam|temperature)\b", t):
-            score = self._best_match(t, self.weather_phrases, .55) or .78
+        weather_cue = bool(re.search(r"\b(weather|forecast|rain|raining|mausam|temperature)\b", t))
+        weather_score = self._best_match(t, self.weather_phrases, .68)
+        # Mentioning weather/temperature in a general question is not itself a request for a forecast.
+        if weather_cue and weather_score:
             city = ""
             searchable = original.rstrip(" .?!")
-            match = re.search(r"\b(?:in|for|at)\s+([a-z][a-z .'-]{1,45})$", searchable, flags=re.I)
+            match = re.search(r"\b(?:in|for|at|near)\s+([a-z][a-z .'-]{1,45})$", searchable, flags=re.I)
             if match:
                 city_words = match.group(1).strip().split()
                 if city_words and city_words[-1].casefold() in {"today", "now", "tonight", "tomorrow"}:
                     city_words.pop()
                 city = " ".join(city_words).strip(" .?!")
-            return Intent("weather", city, score)
+            return Intent("weather", city, weather_score)
 
-        if re.search(r"\b(time|clock)\b", t) and re.search(r"\b(what|tell|current|now|time|clock)\b", t):
-            return Intent("time", confidence=self._best_match(t, self.time_phrases, .54) or .78)
+        time_score = self._best_match(t, self.time_phrases, .72)
+        time_word = bool(re.search(r"\b(time|clock)\b", t))
+        time_question = bool(re.search(r"\b(what|tell|current|now)\b", t))
+        if time_score or (time_word and time_question):
+            return Intent("time", confidence=time_score or .78)
 
         if t in self.greetings or self._best_match(t, self.greetings, .90):
             return Intent("greeting", confidence=.94)

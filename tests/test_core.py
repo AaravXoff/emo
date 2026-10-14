@@ -85,6 +85,15 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(self.router.match("This is a history question").name, "llm")
         self.assertEqual(self.router.match("Hi EMO").name, "greeting")
 
+    def test_topic_mentions_do_not_become_time_weather_or_animal_commands(self):
+        self.assertEqual(self.router.match("I have no time today").name, "llm")
+        self.assertEqual(self.router.match("My clock is broken").name, "llm")
+        self.assertEqual(self.router.match("Explain how temperature affects pressure").name, "llm")
+        self.assertEqual(self.router.match("What does the cat eat?").name, "llm")
+        self.assertEqual(self.router.match("What's the temperature in Delhi today?").name, "weather")
+        self.assertEqual(self.router.match("Is it raining in Delhi?").name, "weather")
+        self.assertEqual(self.router.match("What time is it now?").name, "time")
+
     def test_normalization(self):
         self.assertEqual(normalize(" Hello, EMO!!! "), "hello emo")
 
