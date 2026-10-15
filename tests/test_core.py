@@ -12,7 +12,7 @@ from pathlib import Path
 from intent_router import IntentRouter
 from response_cache import ResponseCache, normalize
 from emo import strip_wake_word
-from html_face import HtmlFace
+from pygame_face import PygameFace, BLUE, BLACK
 from state import RobotStatus
 from speech import WhisperRecognizer
 from feature_hub import FEATURES, LocalFeatureHub
@@ -35,10 +35,11 @@ class ConfigValidationTests(unittest.TestCase):
             "MAX_UTTERANCE_SECONDS": "-1",
             "TRAILING_SILENCE_SECONDS": "99",
             "WHISPER_CPP_THREADS": "999",
-            "LM_STUDIO_TIMEOUT_SECONDS": "0",
+            "REMOTE_PORT": "99999",
+            "DISPLAY_WIDTH": "0",
             "WAKE_TIMEOUT_SECONDS": "9999",
             "TOUCH_GPIO": "999",
-            "SERVO_GPIO": "28",
+            "SERVO_GPIOS": "5,5,12,13",
             "THERMAL_WARNING_C": "90",
             "THERMAL_LOCKOUT_C": "80",
             "THERMAL_RESUME_C": "85",
@@ -54,10 +55,11 @@ class ConfigValidationTests(unittest.TestCase):
         self.assertEqual(config.max_utterance_seconds, 8.0)
         self.assertEqual(config.trailing_silence_seconds, 0.75)
         self.assertEqual(config.whisper_cpp_threads, 2)
-        self.assertEqual(config.lm_studio_timeout_seconds, 35)
+        self.assertEqual(config.remote_port, 8766)
+        self.assertEqual(config.display_width, 320)
         self.assertEqual(config.wake_timeout_seconds, 20)
-        self.assertEqual(config.touch_gpio, 0)
-        self.assertEqual(config.servo_gpio, 0)
+        self.assertEqual(config.touch_gpio, 16)
+        self.assertEqual(config.servo_gpios, (5, 6, 12, 13))
         self.assertEqual(
             (config.thermal_warning_c, config.thermal_lockout_c, config.thermal_resume_c),
             (75.0, 82.0, 72.0),
@@ -131,57 +133,20 @@ class CacheTests(unittest.TestCase):
             cache.close()
 
 
-class FaceAnimationAssetTests(unittest.TestCase):
-    def test_face_uses_the_supplied_pygame_eye_motion_not_pupils_or_glow(self):
-        face_html = (Path(__file__).resolve().parents[1] / "face.html").read_text(encoding="utf-8")
-        self.assertIn("eyeWidthDefault=90, eyeHeightDefault=90, spaceDefault=14", face_html)
-        self.assertIn("eyeLxNext", face_html)
-        self.assertIn("eyeLh=(eyeLh+eyeHeightDefault)/2", face_html.replace(" ", ""))
-        self.assertIn("Math.sin(now*0.01)*4*scaleY", face_html.replace(" ", ""))
-        self.assertIn("randInt(2000,5000)", face_html.replace(" ", ""))
-        self.assertIn("randInt(3000,7000)", face_html.replace(" ", ""))
-        self.assertIn("randInt(10,40)", face_html.replace(" ", ""))
-        self.assertIn("border-radius:24.4%", face_html)
-        self.assertIn("#face[data-state=listening]{--eye:#ffd200}", face_html)
-        self.assertNotIn(".eye::before", face_html)
-        self.assertNotIn(".eye-glint", face_html)
-        self.assertNotIn("@keyframes idle-float", face_html)
-        self.assertNotIn("@keyframes glint-sparkle", face_html)
-        self.assertIn("prefers-reduced-motion:reduce", face_html.replace(" ", ""))
-        self.assertIn("window.matchMedia('(prefers-reduced-motion: reduce)')", face_html)
+class PygameFaceTests(unittest.TestCase):
+    def test_only_blue_eyes_and_black_background(self):
+        self.assertEqual(BLUE, (0, 0, 255))
+        self.assertEqual(BLACK, (0, 0, 0))
 
-
-class FaceApiTests(unittest.TestCase):
-    def test_server_can_stop_and_restart_cleanly(self):
-        face = HtmlFace(port=0)
-        try:
-            face.start_server()
-            first_server = face.server
-            first_thread = face.server_thread
-            self.assertIsNotNone(first_server)
-            self.assertIsNotNone(first_thread)
-            self.assertTrue(first_thread.is_alive())
-
-            face.stop_server()
-            self.assertIsNone(face.server)
-            self.assertIsNone(face.server_thread)
-            self.assertFalse(first_thread.is_alive())
-
-            face.start_server()
-            self.assertIsNotNone(face.server)
-            self.assertIsNot(face.server, first_server)
-            self.assertTrue(face.server_thread.is_alive())
-        finally:
-            face.stop_server()
-
-    def test_state_endpoint_exposes_boot_status(self):
-        status = RobotStatus()
-        face = HtmlFace(status=status)
-        response = face.app.test_client().get("/api/state")
-        self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertFalse(payload["boot_complete"])
-        self.assertIn("Whisper", payload["boot_steps"])
+    def test_face_state_changes_without_starting_display(self):
+        face = PygameFace(fullscreen=False)
+        face.set_state("listening", duration=5)
+        self.assertEqual(face.get_state(), "listening")
+        face.set_talking(True)
+        self.assertTrue(face.talking)
+        face.set_talking(False)
+        self.assertFalse(face.talking)
+        self.assertIsNone(face.surface)
 
 
 class FasterWhisperTests(unittest.TestCase):
@@ -409,7 +374,7 @@ class AssistantSafetyTests(unittest.TestCase):
             "weather_cache_ttl_seconds": 300,
         })()
         self.status = RobotStatus()
-        self.face = HtmlFace(status=self.status)
+        self.face = PygameFace(status=self.status, fullscreen=False)
         self.speech = self.FakeSpeech()
         self.speech.face = self.face
         self.llm = self.FakeLLM()
