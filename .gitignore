@@ -7,6 +7,10 @@ __pycache__/
 !.env.example
 *.wav
 *.mp3
+*.ogg
+!assets/songs/*.wav
+!assets/songs/*.mp3
+!assets/songs/*.ogg
 *.onnx
 *.pt
 *.pth
