@@ -16,17 +16,25 @@ case "$ARCH" in
   *) echo "Architecture: $ARCH. Faster-Whisper/CTranslate2 support may be limited." ;;
 esac
 
-echo "[2/7] Creating virtual environment and installing core dependencies..."
+echo "[2/7] Enabling Raspberry Pi I2C/SPI buses when raspi-config is available..."
+if command -v raspi-config >/dev/null 2>&1; then
+  sudo raspi-config nonint do_i2c 0 || true
+  sudo raspi-config nonint do_spi 0 || true
+else
+  echo "raspi-config not found; enable I2C and SPI manually before using the sensors/display."
+fi
+
+echo "[3/8] Creating virtual environment and installing core dependencies..."
 if [[ ! -x .venv/bin/python ]]; then python3 -m venv .venv; fi
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
 .venv/bin/python -m pip install -r requirements.txt
 
-echo "[3/7] Preparing local configuration..."
+echo "[4/8] Preparing local configuration..."
 mkdir -p data assets/songs
 if [[ ! -f .env ]]; then cp .env.example .env; fi
 chmod 600 .env
 
-echo "[4/7] Installing/starting Ollama and downloading the configured model..."
+echo "[5/8] Installing/starting Ollama and downloading the configured model..."
 if ! command -v ollama >/dev/null 2>&1; then
   curl -fsSL https://ollama.com/install.sh | sh
 fi
@@ -40,13 +48,13 @@ fi
 MODEL="$(.venv/bin/python -c 'from config import Config; print(Config.from_env().ollama_model)')"
 ollama pull "$MODEL"
 
-echo "[5/7] Installing/pre-downloading English-only Whisper tiny.en..."
+echo "[6/8] Installing/pre-downloading English-only Whisper tiny.en..."
 bash "$ROOT_DIR/setup_english_whisper.sh"
 
-echo "[6/7] Downloading the Vosk wake-word model..."
+echo "[7/8] Downloading the Vosk wake-word model..."
 .venv/bin/python "$ROOT_DIR/scripts/download_vosk_model.py"
 
-echo "[7/7] Creating a private remote-control token if none is set..."
+echo "[8/8] Creating a private remote-control token if none is set..."
 .venv/bin/python - <<'PY'
 import secrets
 from pathlib import Path
