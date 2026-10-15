@@ -1,3 +1,4 @@
+# Core runtime dependencies; Flask is used only by the separate web remote controller.
 Flask>=3.0,<4.0
 numpy>=1.24
 sounddevice>=0.4.6
