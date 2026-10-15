@@ -1,225 +1,133 @@
-# EMO — Local AI Robot Assistant
+# EMO — Pygame-first Raspberry Pi robot
 
-EMO is a modular Python assistant for Raspberry Pi OS with an HTML/CSS face, local speech capture, Whisper speech recognition, fast local instructions, a SQLite context/response cache, LM Studio fallback, and speech output.
+EMO is a local robot assistant for Raspberry Pi OS with a Pygame-only blue-eye display, Ollama chat, Vosk wake-word detection, English-only Faster-Whisper transcription, configurable Chatterbox speech, four servo channels, two MPU6050 sensors, capacitive touch, MP3 playback, optional camera AI, and a protected Flask remote controller.
 
-Repository: https://github.com/AaravXoff/emo
+The code is integrated, but **hardware/model runtime checks must still be completed on the actual Pi and exact display panel**. An arbitrary set of SPI pins does not identify the LCD controller or automatically configure its kernel driver.
 
-## Current capabilities
+## Boot flow
 
-- Local microphone input with input-device auto-selection, energy-based voice activity detection and configurable wake phrase (`Hey EMO` by default).
-- Whisper.cpp or optional Python Whisper for language detection and transcription; Whisper.cpp can translate non-English speech to English and offline Argos Translate packs are also supported.
-- Local, low-latency intent handling for greetings, current time, weather, animal sound requests, and an original EMO tune.
-- LM Studio OpenAI-compatible endpoint for fallback questions (configured for Qwen 2.5 0.5B; use the exact model ID reported by your server).
-- Replies localized with installed offline translation packs or generated in the detected language by the local LLM.
-- Lazy Chatterbox TTS support with `espeak-ng` fallback.
-- SQLite stores text transcripts, detected language, translated input, route, response, timing and cache-hit metadata. Raw audio is deleted after recognition.
-- HTML face with expressions, speaking mouth, thinking spinner, thermal flames, temperature/status API, and a boot progress screen.
-- Thermal monitoring and optional GPIO touch sensor / single servo.
+1. Pygame starts locally and renders only two solid-blue rounded rectangular eyes. The supplied animation style includes blinks, smooth look-around, listening bob, and talking squish. No HTML is used for the face.
+2. EMO checks microphone, wake model, Whisper package, Ollama, speech, GPIO, MPU6050, remote, and optional vision setup.
+3. When core boot checks finish, EMO plays \`assets/songs/emo_is_ready.mp3\` if supplied; otherwise it speaks **“EMO is ready.”**
+4. A small Vosk listener waits for the wake word **“EMO”** (touch also wakes it). Only after wake does the app record a request and initialize/use Whisper. It returns to standby after each response.
 
-The NPU is not used by this code yet because the exact NPU board and runtime were not specified. The camera indicator remains available in the renderer, but camera gestures are not currently implemented in this version.
+Vosk is the low-cost wake-word engine; Whisper is the speech-to-text engine. The configured \`tiny.en\` model is English-only.
 
-## Important Pi 3B+ limitations
+## Install
 
-A Raspberry Pi 3B+ has very limited RAM and CPU for modern neural models. This is why the default Whisper model is `tiny` and model loading is lazy. Test one model at a time before increasing model size. Chatterbox Base and Chromium plus Whisper plus a local LLM may not fit in the same memory budget. In auto mode, EMO avoids loading Chatterbox on a device with less than about 1.8 GB of RAM and uses `espeak-ng` instead.
+On Raspberry Pi OS, use a 64-bit OS for the Faster-Whisper route. In a terminal:
 
-**Recommended STT for a Pi 3B+: Whisper.cpp.** It builds a native CPU executable, avoids installing the huge Python/PyTorch stack, supports Raspberry Pi, and runs multilingual models. The setup script below downloads the multilingual `tiny` model by default.
-
-The original Python Whisper backend remains optional for machines with enough RAM and storage, but on your Pi its PyTorch package download may be very large. The native Whisper.cpp backend is what we recommend for the current hardware.
-
-## 1. Install the core on the Pi
-
-Clone this repository into `~/emo` or update an existing checkout:
-
-```bash
-cd ~
-git clone https://github.com/AaravXoff/emo.git
+\`\`\`bash
 cd ~/emo
 bash install_pi.sh
-```
+\`\`\`
 
-If you already cloned the repository:
+Setup installs the runtime dependencies, installs/starts Ollama, pulls \`qwen2.5:0.5b\`, downloads English \`tiny.en\`, downloads the small Vosk wake model, and creates a private \`REMOTE_CONTROL_TOKEN\` in the local \`.env\`. The setup requires internet and can take a while. Review the scripts before running them if you prefer manual installation.
 
-```bash
-cd ~/emo
-git pull
-bash install_pi.sh
-```
+Start EMO:
 
-Edit configuration:
-
-```bash
-nano ~/emo/.env
-```
-
-The installer copies `.env.example` to `.env`. Never commit `.env`; it is ignored by Git.
-
-## 2. Install optional AI components
-
-### English-only Whisper — Faster-Whisper tiny.en
-
-Your requested English-only setup uses Faster-Whisper with the small `tiny.en` model and CPU INT8 inference. On a 64-bit OS, install and pre-download its weights with:
-
-```bash
-cd ~/emo
-bash setup_english_whisper.sh
-```
-
-The script installs the optional dependency, downloads/verifies the model in `~/.cache/emo/whisper-en`, and updates only the three Whisper settings in `.env`. The assistant then pins transcription to English and uses beam size 1. It does not need to download the model again on each start.
-
-Faster-Whisper is an optional CPU backend, and model loading/transcription can still be slow or memory-intensive on a Raspberry Pi 3B+. For the lowest-memory option, use the native Whisper.cpp setup below instead.
-
-### Whisper speech recognition — recommended: Whisper.cpp
-
-The native build is the recommended option for Raspberry Pi 3B+. It avoids installing a large Python/PyTorch wheel.
-
-```bash
-cd ~/emo
-bash setup_whisper_cpp.sh
-```
-
-The build uses one compile job to keep peak RAM down. It downloads the multilingual tiny model into \`~/whisper.cpp/models/ggml-tiny.bin\`. Model download and initial compilation need an internet connection.
-
-Open your existing local config file:
-
-```bash
-nano ~/emo/.env
-```
-
-Add or update these settings (if they're not present already):
-
-```ini
-WHISPER_BACKEND=cpp
-WHISPER_CPP_BIN=~/whisper.cpp/build/bin/whisper-cli
-WHISPER_CPP_MODEL=~/whisper.cpp/models/ggml-tiny.bin
-WHISPER_CPP_THREADS=2
-```
-
-Save in Nano with Ctrl+O, Enter, then Ctrl+X. The program runs the small multilingual model on the CPU, detects the spoken language, and can run a second pass to translate speech into English.
-
-If you deliberately want the Python Whisper backend on a larger computer, set \`WHISPER_BACKEND=python\` and install \`openai-whisper\` separately. We do not recommend repeating that large PyTorch install on a Pi 3B+ right now.
-
-### Offline language translation (optional)
-
-```bash
-source .venv/bin/activate
-pip install -r requirements-translation.txt
-python translation_setup.py --pairs hi-en,en-hi,pa-en,en-pa
-```
-
-Only install language packs needed for your languages; they take storage. Use `--pairs` to customize. Argos translations run locally after packages are installed.
-
-### LM Studio / Qwen
-
-The program sends fallback questions to the configured LM Studio server endpoint (`LM_STUDIO_BASE_URL`). Start the local server in LM Studio, load your Qwen 2.5 0.5B Instruct model, and find its exact model ID at:
-
-```bash
-curl http://127.0.0.1:1234/v1/models
-```
-
-If LM Studio is running on a different computer, set `LM_STUDIO_BASE_URL` in the Pi's `.env` to that computer's LAN address, e.g. `http://192.168.1.40:1234/v1`, and configure LM Studio to accept LAN connections. The example IP is only illustrative. Do not expose the server to the public internet.
-
-### Chatterbox TTS (optional)
-
-Chatterbox is memory- and dependency-heavy and may not install or run well on Pi 3B+.
-
-```bash
-source .venv/bin/activate
-pip install -r requirements-chatterbox.txt
-```
-
-Use `TTS_ENGINE=auto` to try Chatterbox on larger machines and fall back to `espeak-ng` on low-RAM boards. To force a lightweight voice, set `TTS_ENGINE=espeak`. To explicitly attempt neural voice output on your Pi, set `TTS_ENGINE=chatterbox` and expect potential installation/memory problems.
-
-### Microphone troubleshooting
-
-A Raspberry Pi 3B+ does not have a built-in microphone. Connect a USB microphone or a supported audio-input adapter. List ALSA capture hardware with `arecord -l` and Python/PortAudio devices with:
-
-```bash
-source ~/emo/.venv/bin/activate
-python -c "import sounddevice as sd; print(sd.query_devices()); print('default device:', sd.default.device)"
-```
-
-EMO prefers a valid OS-default input and otherwise chooses the first detected input. To force a specific device, edit `AUDIO_INPUT_DEVICE` in `.env` to the device index (number) or a unique substring of the device name shown by `sd.query_devices()`. Use `auto` to return to automatic selection. EMO tries `AUDIO_SAMPLE_RATE` first; if the microphone does not support that rate, it tries the device's reported native rate and resamples to the model's required rate. When no capture device exists, EMO reports a throttled warning rather than printing a traceback every two seconds. The listening loop also observes shutdown signals so it does not wait for the full silence timeout when you stop the program.
-
-## 3. Weather and time
-
-- Time uses the TimeAPI.io endpoint for the configured IANA zone in `TIMEZONE` (default `Asia/Kolkata`) and falls back to the Pi's system clock when the API is unavailable. Online use of the time API requires internet; the fallback works offline if the Pi clock is correct.
-- Weather uses the Open-Meteo public geocoding/current-weather endpoints and needs an internet connection. No API key is required. Set `WEATHER_CITY` in `.env`, or ask for a named city (e.g., “what's the weather in Delhi?”). Weather responses are cached briefly.
-
-## 4. Run
-
-```bash
+\`\`\`bash
 cd ~/emo
 source .venv/bin/activate
 python emo.py
-```
+\`\`\`
 
-Open `http://127.0.0.1:8765/` in a browser on the Pi to see the face. The JSON state is at `/api/state`, boot data at `/api/boot`, and health check at `/health`.
+If Faster-Whisper/CTranslate2 cannot install or load on your particular ARM image, the install will stop rather than pretend it succeeded. A low-memory fallback is Whisper.cpp using an English model (\`ggml-tiny.en.bin\`): install/build Whisper.cpp, set \`WHISPER_BACKEND=cpp\` and \`WHISPER_CPP_MODEL\` in \`.env\`. The existing helper downloads multilingual tiny by default, so select/download the English \`tiny.en\` weights when English-only recognition is required.
 
-Raspberry Pi OS Lite does not include a desktop/browser by default. The HTML page needs a graphical browser session to appear on the local display; otherwise the Python assistant can run headless and the screen page can be opened from a browser on the same device if a graphical session is available.
+## Hardware pinout
 
-## 5. Start at login with systemd
+Configured values use **BCM GPIO numbers**, not header pin numbers.
 
-Run these after the files are in `~/emo` and `.venv` exists:
+| Device/channel | BCM GPIO | Physical pin | Notes |
+|---|---:|---:|---|
+| Servo 1 — head yaw | 5 | 29 | First servo output |
+| Servo 2 — head pitch | 6 | 31 | Second servo output |
+| Servo 3 — left arm | 12 | 32 | Third servo output |
+| Servo 4 — right arm | 13 | 33 | Fourth servo output |
+| Capacitive touch | 16 | 36 | Driver expects HIGH when touched |
+| MPU6050 SDA | 2 | 3 | I2C SDA |
+| MPU6050 SCL | 3 | 5 | I2C SCL |
+| MPU6050 #1 address | — | — | \`0x68\` (AD0 low) |
+| MPU6050 #2 address | — | — | \`0x69\` (AD0 high) |
 
-```bash
-mkdir -p ~/.config/systemd/user
-cp ~/emo/systemd/emo.service ~/.config/systemd/user/emo.service
-systemctl --user daemon-reload
-systemctl --user enable --now emo.service
-systemctl --user status emo.service --no-pager
-journalctl --user -u emo.service -f
-```
+Enable I2C in Raspberry Pi OS. The two MPU6050 boards must have distinct addresses. The software polls each responding sensor and publishes the latest acceleration/gyro readings to remote status.
 
-A graphical auto-start for Chromium must be configured separately if you want the face shown on a local desktop/kiosk.
+**Servo power warning:** use an appropriately rated external regulated servo supply and connect its ground to Raspberry Pi ground. Never power four servos from the Pi's 3.3 V pin or GPIO header. Start with servo horns disconnected, centered, and mechanically unloaded while confirming directions, pulse width, neutral angles, and safe movement limits.
 
-## 6. Tests
+### SPI display signals supplied
 
-Install Flask in a development environment, then run the local logic tests:
+| Signal (assumed) | BCM GPIO | Physical pin |
+|---|---:|---:|
+| SPI CE1 / select | 7 | 26 |
+| SPI CE0 / select | 8 | 24 |
+| SPI MISO | 9 | 21 |
+| SPI MOSI | 10 | 19 |
+| SPI SCLK | 11 | 23 |
+| Additional display control | 17 | 11 |
+| Additional display control | 24 | 18 |
+| Additional display control | 25 | 22 |
 
-```bash
-python -m pip install Flask
+GPIO 17/24/25 are labelled additional control signals because their exact roles (often reset, data/command, backlight, or similar) depend on your LCD board. The LCD controller/model is not specified, so a matching Raspberry Pi kernel overlay/driver must be configured separately. Pygame needs an available framebuffer or SDL/KMS display.
+
+For a panel whose driver exposes \`/dev/fb1\`, test:
+
+\`\`\`bash
+SDL_VIDEODRIVER=fbcon SDL_FBDEV=/dev/fb1 python emo.py
+\`\`\`
+
+Otherwise leave \`DISPLAY_DRIVER=auto\` or configure the working SDL/KMS driver in \`.env\`. Set \`DISPLAY_WIDTH\` and \`DISPLAY_HEIGHT\` to the panel's actual resolution.
+
+## A–Z movement
+
+\`motion_engine.py\` provides 26 named sequences, each made from waypoints for head yaw, head pitch, left arm, and right arm. Say “move A”, “movement A”, or a single letter to queue a motion; the remote also has A–Z buttons. Calibrate each physical mechanism before letting it move freely—the sequences are starting points, not safety-certified mechanical limits.
+
+The Pygame eyes remain blue in every state.
+
+## PC/mobile remote
+
+Flask is used only for the remote controller; the local face is Pygame. Setup makes a random access token. On a trusted local network, open:
+
+\`\`\`text
+http://<raspberry-pi-lan-address>:8766/
+\`\`\`
+
+Enter the \`REMOTE_CONTROL_TOKEN\` value from \`.env\`. The remote can show status, request wake/listening, queue A–Z poses, play a song, and ask EMO to speak a short message. If the token is blank, remote control stays disabled.
+
+Keep the token private and do not expose this simple controller to the public internet. It does not provide TLS termination or multi-user account management.
+
+## Songs
+
+Put MP3/WAV/OGG files you have permission to use in \`assets/songs/\`. Playback needs \`mpg123\`, \`ffplay\`, or \`cvlc\`; \`install_pi.sh\` installs \`mpg123\`. To play a custom startup message, add \`assets/songs/emo_is_ready.mp3\`. The project does not ship copyrighted songs or pretend any missing audio files exist.
+
+“Sing” selects a random file; if no songs are installed, EMO uses its original synthesized tune.
+
+## Whisper and Chatterbox customization
+
+\`.env\` supports:
+
+- \`WHISPER_BEAM_SIZE\` (1–5; default 1) for the CPU/accuracy tradeoff.
+- \`WHISPER_VAD_FILTER\` and \`WHISPER_NO_SPEECH_THRESHOLD\` for transcription tuning.
+- \`CHATTERBOX_EXAGGERATION\`, \`CHATTERBOX_CFG_WEIGHT\`, and \`CHATTERBOX_TEMPERATURE\` for voice-generation settings.
+- \`CHATTERBOX_REF_AUDIO\` to point at a voice-reference recording you have permission to use.
+
+The default \`TTS_ENGINE=auto\` avoids loading Chatterbox on low-memory systems and uses \`espeak-ng\` on the Pi 3B+. Chatterbox requires a heavyweight neural/Torch runtime and is not realistic on a stock 1 GB Pi 3B+. On a computer with sufficient RAM, \`bash scripts/setup_chatterbox.sh --force\` installs the optional package; set \`TTS_ENGINE=chatterbox\` in \`.env\` to opt in. Reference voice settings customize generation but do not train a new voice model.
+
+## Optional computer vision
+
+Adapters are provided for:
+- [Kazuhito00's MediaPipe hand gesture recognition](https://github.com/Kazuhito00/hand-gesture-recognition-using-mediapipe)
+- [face_recognition](https://github.com/ageitgey/face_recognition)
+- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)
+
+Run \`bash scripts/setup_vision_repos.sh\` to shallow-clone the upstream projects into \`vendor/\`. Install optional packages separately with \`pip install -r requirements-vision.txt\`. Recognition tasks default to disabled. The full stacks may be too heavy on the Pi 3B+; enable one at a time and benchmark memory and temperature first. Known face images should live in \`data/known_faces/\` and should not be committed.
+
+## Tests
+
+\`\`\`bash
+python -m compileall -q .
 python -m unittest discover -s tests -v
-```
+\`\`\`
 
-Tests exercise direct-intent routing, wake-phrase stripping, cache keys and context logging. Hardware, microphone, Whisper model inference, Open-Meteo, LM Studio and Chatterbox require device-specific integration testing.
+Unit tests use stubs for model/network features where possible. Passing them does not prove that the actual GPIOs, camera, SPI controller, speaker, downloaded models, or Ollama will work on your device; hardware-in-the-loop validation is still needed.
 
-## 7. Hardware and safety notes
-
-- `TOUCH_GPIO` and `SERVO_GPIO` use **BCM GPIO numbers** (not physical header-pin positions); `0` disables the optional component. Valid config values are `0`–`27`; verify your board's pin map and wiring before enabling hardware.
-- Do not power a servo directly from a GPIO pin. Use a suitable external servo supply and a common ground.
-- Thermal monitoring requests a pause for heavy inference at the configured critical temperature and resumes after cooling.
-- No raw microphone audio is kept. Transcripts and answers are stored locally in `data/emo_cache.sqlite3`. Set `CACHE_ENABLED=false` to disable that text cache/log. Saved notes and to-dos live separately in `data/emo_features.sqlite3` and remain when the transcript cache is disabled; remove the corresponding database file to erase each store. Relative data/cache paths are resolved from the project directory, not the shell's current directory.
-- Weather requires connectivity. LM Studio must be reachable for fallback Q&A. Direct greeting/time/animal/tune actions can work without LM Studio.
-
-## Local feature hub (100+ commands)
-
-EMO includes a standard-library feature hub that runs before the local LLM fallback. The catalog covers calendar/date helpers, safe arithmetic, unit conversion, text transformations, base64/URL/binary/hex/JSON helpers, random utilities, saved notes, to-do items, countdown timers, Raspberry Pi/system diagnostics, and explicit face expressions. The feature inventory lives in `feature_hub.py`; the current catalog contains over 100 named capabilities.
-
-Try saying or typing:
-
-- `help` or `what can you do`
-- `calculate 12 * (3 + 4)`, `square root of 81`, `average of 3, 7, 9`
-- `convert 5 km to miles`, `100 c to f`
-- `count words in: hello there`, `uppercase: hello emo`, `is this a palindrome: never odd or even`
-- `base64 encode: hello`, `json pretty: {"ok":true,"count":3}`
-- `add note: check the wiring`, `list notes`, `add todo: test the microphone`, `complete todo 1`
-- `set timer for 10 seconds to take a break`, `cancel timer`, `start pomodoro`
-- `show device status`, `memory status`, `cpu temperature`, `dance`
-
-Notes and tasks persist locally in `data/emo_features.sqlite3`. Timers are in-memory and are cancelled when EMO shuts down. System diagnostics use local OS interfaces and do not perform shell execution; the network-status response confirms only whether a local interface is present, not internet reachability. Arithmetic is evaluated with a restricted syntax tree, not Python `eval`. The feature hub adds no third-party runtime dependencies.
-
-The catalog is tested on GitHub Actions, but timers, GPIO, audio, real temperature sensors, and speech output still need testing on the actual Raspberry Pi. This is a large set of local utility commands, not a claim that every command uses an AI model.
-
-## Project layout
-
-- `emo.py`: startup, wake phrase loop, thermal lockout.
-- `assistant.py`: direct intents, response cache, LM Studio fallback and orchestration.
-- `speech.py`: Whisper transcription/language detection and translation stage.
-- `audio_io.py`: microphone recording and synthesized sound effects.
-- `translation.py`, `translation_setup.py`: optional offline translation.
-- `response_cache.py`: local SQLite cache and text-only turn context.
-- `llm_client.py`: LM Studio OpenAI-compatible API client.
-- `tts_engine.py`: Chatterbox integration with lightweight fallback.
-- `hardware.py`, `state.py`: optional GPIO/thermal status.
-- `html_face.py`, `face.html`: Flask bridge and UI.
-- `.env.example`: editable configuration template.
+This project prioritizes real modules, tests, and explainable setup over padding the source tree to hit an arbitrary line count.
