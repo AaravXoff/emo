@@ -1,0 +1,2 @@
+# Optional: install only if a compatible wheel exists for your Python/architecture.
+tflite-runtime>=2.14,<3
