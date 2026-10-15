@@ -7,7 +7,7 @@ import threading
 import time
 
 log = logging.getLogger(__name__)
-BLUE = (0, 220, 255)
+BLUE = (0, 0, 255)
 BLACK = (0, 0, 0)
 
 
