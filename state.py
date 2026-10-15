@@ -31,6 +31,7 @@ class RobotStatus:
             "Wake word": {"status": "pending", "detail": "Waiting for lightweight wake-word engine"},
             "IMU": {"status": "pending", "detail": "Checking MPU6050 sensors"},
             "Remote controller": {"status": "pending", "detail": "Waiting for remote-control token"},
+            "Vision": {"status": "pending", "detail": "Optional camera stack is disabled"},
             "Speech output": {"status": "pending", "detail": "Checking available TTS engines"},
             "Hardware": {"status": "pending", "detail": "Optional GPIO sensors/servo"},
         }
