@@ -66,6 +66,7 @@ class OllamaClient:
                 model=self.model,
                 messages=messages,
                 options={"temperature": 0.45, "num_predict": 160},
+                keep_alive=0,
             )
             message = self._get_field(response, "message", {})
             content = str(self._get_field(message, "content", "") or "").strip()
