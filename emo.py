@@ -35,6 +35,9 @@ def strip_wake_word(text: str, phrases: tuple[str, ...]) -> tuple[bool, str]:
         if match:
             remaining = (clean[:match.start()] + " " + clean[match.end():]).strip()
             return True, remaining.lstrip(" ,;:").strip()
+    words = clean.split()
+    if len(words) >= 2 and words[0].casefold() in {"hey", "hi", "hello"} and words[1].strip(",.!?:;").casefold() in {"emo", "emu"}:
+        return True, " ".join(words[2:]).lstrip(" ,;:").strip()
     return False, clean
 
 
@@ -190,7 +193,10 @@ class EMOApplication:
             self.status.set_stage("Cooling down", "Heavy inference is paused until the Pi cools")
             return
         self.status.set_stage("Recognizing speech", f"Transcribing with {self.config.whisper_model}")
-        result = self.recognizer.transcribe(path)
+        try:
+            result = self.recognizer.transcribe(path)
+        finally:
+            self.recognizer.release()
         text = (result.text or "").strip()
         if not text:
             self.status.set_stage("Wake standby", "No request recorded; say EMO again")
