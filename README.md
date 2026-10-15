@@ -50,7 +50,7 @@ Configured values use **BCM GPIO numbers**, not header pin numbers.
 | MPU6050 #1 address | — | — | \`0x68\` (AD0 low) |
 | MPU6050 #2 address | — | — | \`0x69\` (AD0 high) |
 
-Enable I2C in Raspberry Pi OS. The two MPU6050 boards must have distinct addresses. The software polls each responding sensor and publishes the latest acceleration/gyro readings to remote status.
+The setup script enables the Raspberry Pi I2C and SPI interfaces through `raspi-config` when that command is available; reboot after install if the OS requests it. The two MPU6050 boards must have distinct addresses. The software polls each responding sensor and publishes the latest acceleration/gyro readings to remote status.
 
 **Servo power warning:** use an appropriately rated external regulated servo supply and connect its ground to Raspberry Pi ground. Never power four servos from the Pi's 3.3 V pin or GPIO header. Start with servo horns disconnected, centered, and mechanically unloaded while confirming directions, pulse width, neutral angles, and safe movement limits.
 
