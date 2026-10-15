@@ -1,2 +1,2 @@
-# Optional, memory-intensive speech generation. May not be suitable for a Pi 3B+.
+# Optional high-memory TTS. This is not recommended on Raspberry Pi 3B+ (roughly 1 GB RAM).
 chatterbox-tts

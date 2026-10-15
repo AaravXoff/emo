@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EMO Remote</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#070b10;color:#e7f6ff}
+body{margin:0;max-width:760px;padding:20px;margin-inline:auto}
+h1{color:#00dcff;letter-spacing:.18em}p{color:#91a7b8}
+.panel{background:#101923;border:1px solid #263746;border-radius:14px;padding:16px;margin:14px 0}
+input,button{font:inherit;border-radius:9px;padding:11px;border:1px solid #2a4255;background:#071018;color:#eefaff}
+input{width:100%;box-sizing:border-box;margin:6px 0}
+button{cursor:pointer;background:#102838}button:active{background:#16435b}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.wide{width:100%;margin-top:8px}.status{white-space:pre-wrap;font-size:.9rem;color:#93f2ff}
+</style></head><body>
+<h1>EMO</h1><p>Robot remote · the blue Pygame eyes run on the robot display</p>
+<section class="panel"><label for="token">Remote access token</label><input id="token" type="password" autocomplete="current-password" placeholder="Paste REMOTE_CONTROL_TOKEN"><button class="wide" onclick="connectRemote()">Connect</button></section>
+<section class="panel"><h2>Status</h2><div id="status" class="status">Not connected</div><button class="wide" onclick="refreshStatus()">Refresh status</button></section>
+<section class="panel"><h2>A–Z movement</h2><div id="motions" class="grid"></div></section>
+<section class="panel"><h2>Actions</h2><button onclick="send('wake','')">Wake / listen</button> <button onclick="send('sleep','')">Idle</button> <button onclick="send('sing','')">Play song</button> <button onclick="send('motion','Z')">Reset pose</button><input id="speech" maxlength="200" placeholder="Text for EMO to say"><button class="wide" onclick="sayText()">Speak</button></section>
+<script>
+const storeKey='emoRemoteToken';
+document.getElementById('token').value=sessionStorage.getItem(storeKey)||'';
+function currentToken(){return document.getElementById('token').value.trim()}
+function connectRemote(){sessionStorage.setItem(storeKey,currentToken());refreshStatus()}
+async function api(path,body){const response=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-EMO-Token':currentToken()},body:body?JSON.stringify(body):undefined});const payload=await response.json();if(!response.ok)throw new Error(payload.error||('HTTP '+response.status));return payload}
+async function send(command,argument){try{const result=await api('/api/command',{command,argument});document.getElementById('status').textContent=result.result;await refreshStatus()}catch(error){document.getElementById('status').textContent=error.message}}
+async function sayText(){const value=document.getElementById('speech').value.trim();if(value)send('say',value)}
+async function refreshStatus(){try{const data=await api('/api/status');document.getElementById('status').textContent=JSON.stringify({stage:data.current_stage,message:data.current_message,temperature:data.temperature,last_action:data.last_action,imu:data.imu},null,2)}catch(error){document.getElementById('status').textContent=error.message}}
+document.getElementById('motions').innerHTML='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter=>'<button data-letter="'+letter+'">'+letter+'</button>').join('');
+document.getElementById('motions').addEventListener('click',event=>{const letter=event.target.dataset.letter;if(letter)send('motion',letter)});
+</script></body></html>

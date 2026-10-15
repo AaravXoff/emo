@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 
@@ -14,11 +15,12 @@ class PygameFace:
     """Port of the supplied 320x240 eye animation. Pygame is imported lazily."""
 
     def __init__(self, status=None, width: int = 320, height: int = 240,
-                 fullscreen: bool = True) -> None:
+                 fullscreen: bool = True, driver: str = "auto") -> None:
         self.status = status
         self.width = int(width)
         self.height = int(height)
         self.fullscreen = bool(fullscreen)
+        self.driver = (driver or "auto").strip().lower()
         self.surface = None
         self._pygame = None
         self._clock = None
@@ -55,6 +57,13 @@ class PygameFace:
             import pygame
         except ImportError as exc:
             raise RuntimeError("Pygame is not installed. Run bash setup_emo_robot.sh first.") from exc
+        # SPI LCDs need a Linux framebuffer/kernel driver configured separately.
+        if self.driver in {"fbcon", "framebuffer"}:
+            os.environ.setdefault("SDL_VIDEODRIVER", "fbcon")
+            os.environ.setdefault("SDL_FBDEV", "/dev/fb1")
+            os.environ.setdefault("SDL_NOMOUSE", "1")
+        elif self.driver == "kmsdrm":
+            os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
         self._pygame = pygame
         pygame.init()
         flags = pygame.FULLSCREEN if self.fullscreen else 0

@@ -16,7 +16,7 @@ ORIGINAL_SONG = "I'm little EMO, bright and small. Here to help and learn with a
 
 
 class EMOAssistant:
-    def __init__(self, config, status, face, hardware, recognizer, translator, llm, speech_engine) -> None:
+    def __init__(self, config, status, face, hardware, recognizer, translator, llm, speech_engine, song_library=None) -> None:
         self.config = config
         self.status = status
         self.face = face
@@ -25,6 +25,7 @@ class EMOAssistant:
         self.translator: OfflineTranslator = translator
         self.llm = llm
         self.speech = speech_engine
+        self.song_library = song_library
         self.router = IntentRouter()
         self.cache = ResponseCache(config.cache_db, enabled=config.cache_enabled)
         self.weather = WeatherService()
@@ -158,8 +159,10 @@ class EMOAssistant:
                     response = self._localized(f"A {intent.entity} goes {labels.get(intent.entity, 'sound')}!", language)
                     self.face.set_state("excited", duration=1.5)
                 elif intent.name == "sing":
-                    self.effects.play_original_tune()
-                    response = self._localized(ORIGINAL_SONG, language)
+                    played = self.song_library.play_random() if self.song_library is not None else False
+                    if not played:
+                        self.effects.play_original_tune()
+                    response = self._localized("I played one of my songs." if played else ORIGINAL_SONG, language)
                     self.face.set_state("dance", duration=3.0)
                 else:
                     feature = feature_result
@@ -173,7 +176,7 @@ class EMOAssistant:
                         )
                     else:
                         self.face.set_state("thinking")
-                        self.status.set_stage("Thinking", "Sending the question to the local LM Studio model")
+                        self.status.set_stage("Thinking", "Sending the question to the local Ollama model")
                         try:
                             response_en = self.llm.complete(english_text, response_language="en", history=self._history)
                             if language == "en":
@@ -189,7 +192,7 @@ class EMOAssistant:
                         except Exception as exc:
                             log.warning("LLM fallback failed: %s", exc)
                             response = self._localized(
-                                "I couldn't reach the local language model. Make sure LM Studio is running, the model is loaded, and LM_STUDIO_BASE_URL is correct.",
+                                "I could not reach Ollama. Make sure its local service is running and the selected OLLAMA_MODEL is downloaded.",
                                 language,
                             )
             except Exception as exc:
