@@ -1,4 +1,4 @@
-"""Thread-safe runtime and boot status shared with the HTML face."""
+"""Thread-safe runtime status shared by Pygame, hardware, and the remote controller."""
 from __future__ import annotations
 import threading
 from datetime import datetime, timezone
@@ -13,6 +13,7 @@ class RobotStatus:
         self.thermal_lockout = False
         self.camera_found = False
         self.last_gesture = ""
+        self.imu_readings: dict[str, Any] = {}
         self.noise_floor = 0.0
         self.current_stage = "Starting EMO"
         self.current_message = "Starting local services"
@@ -26,7 +27,10 @@ class RobotStatus:
             "Local cache": {"status": "pending", "detail": "Preparing SQLite cache"},
             "Microphone": {"status": "pending", "detail": "Waiting for audio device check"},
             "Whisper": {"status": "pending", "detail": "Model loads on first utterance"},
-            "LM Studio": {"status": "pending", "detail": "Checking local model server"},
+            "Ollama": {"status": "pending", "detail": "Checking Ollama model server"},
+            "Wake word": {"status": "pending", "detail": "Waiting for lightweight wake-word engine"},
+            "IMU": {"status": "pending", "detail": "Checking MPU6050 sensors"},
+            "Remote controller": {"status": "pending", "detail": "Waiting for remote-control token"},
             "Speech output": {"status": "pending", "detail": "Checking available TTS engines"},
             "Hardware": {"status": "pending", "detail": "Optional GPIO sensors/servo"},
         }
@@ -55,6 +59,10 @@ class RobotStatus:
             self.camera_found = bool(found)
             self.last_gesture = str(gesture)[:80]
 
+    def set_imu(self, readings: dict[str, Any]) -> None:
+        with self.lock:
+            self.imu_readings = dict(readings)
+
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
             return {
@@ -63,6 +71,7 @@ class RobotStatus:
                 "thermal_lockout": self.thermal_lockout,
                 "camera_found": self.camera_found,
                 "last_gesture": self.last_gesture,
+                "imu": dict(self.imu_readings),
                 "noise_floor": self.noise_floor,
                 "current_stage": self.current_stage,
                 "current_message": self.current_message,

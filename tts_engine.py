@@ -17,9 +17,14 @@ ESPEAK_VOICES = {
 
 
 class SpeechEngine:
-    def __init__(self, engine: str = "auto", status=None) -> None:
+    def __init__(self, engine: str = "auto", status=None, *, exaggeration: float = 0.5,
+                 cfg_weight: float = 0.5, temperature: float = 0.8, reference_audio=None) -> None:
         self.engine = engine
         self.status = status
+        self.exaggeration = min(1.5, max(0.0, float(exaggeration)))
+        self.cfg_weight = min(1.0, max(0.0, float(cfg_weight)))
+        self.temperature = min(2.0, max(0.1, float(temperature)))
+        self.reference_audio = str(reference_audio) if reference_audio else None
         self._english_model = None
         self._multilingual_model = None
         self.last_engine = "none"
@@ -84,7 +89,10 @@ class SpeechEngine:
                     from chatterbox.tts import ChatterboxTTS
                     self._english_model = ChatterboxTTS.from_pretrained(device="cpu")
                 model = self._english_model
-                audio = model.generate(text)
+                audio = model.generate(
+                    text, exaggeration=self.exaggeration, cfg_weight=self.cfg_weight,
+                    temperature=self.temperature, audio_prompt_path=self.reference_audio,
+                )
             else:
                 if self._multilingual_model is None:
                     from chatterbox.mtl_tts import ChatterboxMultilingualTTS
@@ -94,7 +102,11 @@ class SpeechEngine:
                 if language not in supported:
                     log.info("Chatterbox has no configured language ID %s; using fallback voice.", language)
                     return False
-                audio = model.generate(text, language_id=language)
+                audio = model.generate(
+                    text, language_id=language, exaggeration=self.exaggeration,
+                    cfg_weight=self.cfg_weight, temperature=self.temperature,
+                    audio_prompt_path=self.reference_audio,
+                )
             data = audio.detach().cpu().float().squeeze().numpy()
             data = np.nan_to_num(data).clip(-1.0, 1.0)
             pcm = (data * 32767).astype("<i2", copy=False).tobytes()
