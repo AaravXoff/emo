@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import logging
 import threading
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class RemoteController:
             from werkzeug.serving import make_server
         except ImportError:
             return False, "Flask is missing; install requirements.txt"
-        app = Flask("emo_remote", template_folder="templates")
+        app = Flask("emo_remote", template_folder=str(Path(__file__).resolve().parent / "templates"))
 
         def authorized():
             return hmac.compare_digest(self.token, request.headers.get("X-EMO-Token", ""))
