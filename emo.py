@@ -185,7 +185,12 @@ class EMOApplication:
             ).start()
             return "Queued spoken message"
         if command == "sing":
-            return "Playing an EMO song" if self.songs.play_random() else False
+            if not self.songs.songs():
+                return False
+            threading.Thread(
+                target=self.songs.play_random, daemon=True, name="EMO-Remote-Song"
+            ).start()
+            return "Queued song playback"
         return False
 
     def _handle_transcription(self, path: str) -> None:
