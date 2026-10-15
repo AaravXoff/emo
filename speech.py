@@ -15,6 +15,23 @@ from translation import OfflineTranslator
 log = logging.getLogger(__name__)
 
 
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if minimum <= value <= maximum else default
+
+
+def _bounded_env_float(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    import math
+    return value if math.isfinite(value) and minimum <= value <= maximum else default
+
+
 @dataclass
 class SpeechResult:
     text: str
@@ -239,6 +256,14 @@ class WhisperRecognizer:
             ).strip()
             return transcript, detected_language
 
+    def release(self) -> None:
+        """Release the model objects between requests to limit idle RAM use."""
+        with self._lock:
+            self._model = None
+            self._loaded_name = ""
+            self._faster_model = None
+            self._faster_loaded_name = ""
+
     def transcribe(self, audio_path: str | Path) -> SpeechResult:
         if self.status is not None:
             self.status.set_stage("Recognizing speech", "Running local speech recognition")
@@ -247,18 +272,17 @@ class WhisperRecognizer:
             raw_text, language = self._run_cpp(audio_path, translate_to_english=False, language="auto")
         elif selected == "faster-whisper":
             model = self._get_faster_model(self.model_name)
+            beam_size = _bounded_env_int("WHISPER_BEAM_SIZE", 1, 1, 5)
+            vad_filter = os.getenv("WHISPER_VAD_FILTER", "false").strip().lower() in {"1", "true", "yes", "on"}
+            no_speech_threshold = _bounded_env_float("WHISPER_NO_SPEECH_THRESHOLD", 0.6, 0.0, 1.0)
             try:
                 segments, _info = model.transcribe(
-                    str(audio_path),
-                    task="transcribe",
-                    language="en",
-                    beam_size=1,
-                    condition_on_previous_text=False,
+                    str(audio_path), task="transcribe", language="en", beam_size=beam_size,
+                    condition_on_previous_text=False, vad_filter=vad_filter,
+                    no_speech_threshold=no_speech_threshold,
                 )
             except TypeError:
-                segments, _info = model.transcribe(
-                    str(audio_path), language="en", beam_size=1
-                )
+                segments, _info = model.transcribe(str(audio_path), language="en", beam_size=beam_size)
             raw_text = "".join(segment.text for segment in segments).strip()
             # The tiny.en model and fixed language argument intentionally make this English-only.
             language = "en"
